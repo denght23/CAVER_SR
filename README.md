@@ -83,3 +83,9 @@ We also provide a simpler way to reproduce the experiments in the paper. You can
 - You can use `run_experiments_with_topology` in `caver_run.py` to reproduce Fig 8 in paper.
 - You can use `run_with_traffic_patterns` in `caver_run.py` to reproduce Fig 9, Fig18, and Table 4 in paper.
 
+#### 4. 新增功能
+
+本功能新增了基于接收窗口的乱序报文重排支持，通过以下技术手段优化数据包处理流程：
+1. 报文标记机制​​：在每个流的最后一个数据包添加布尔标志位（bool）标识报文序列的完整性
+2. 固定接收窗口​​：维护64个报文的固定窗口缓冲区
+3. 自适应重排策略​​：当窗口内报文乱序率达到阈值时触发重排操作
