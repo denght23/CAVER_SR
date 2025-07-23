@@ -36,6 +36,7 @@ lb_modes = {
     12: 'hula',
     10: 'dv',
     21: 'noshare',
+    32: 'greedy',  # 新增的greedy模式
 }
 topo2bdp = {
     "leaf_spine_128_100G_OS2": 104000,  # 2-tier

@@ -69,7 +69,8 @@ NS_LOG_COMPONENT_DEFINE("GENERIC_SIMULATION");
 
 /*------Load balancing parameters-----*/
 // mode for load balancer, 0: flow ECMP, 2: DRILL, 3: Conga, 6: Letflow, 9: ConWeave 12:Hula
-uint32_t lb_mode = 0;
+uint32_t lb_mode = 0; //逐流路由流量的路由策略
+uint32_t packet_lb_mode = 0; //逐包路由流量的路由策略
 
 // Conga params (based on paper recommendation)
 Time conga_flowletTimeout = MicroSeconds(100);  // 100us
@@ -1450,6 +1451,11 @@ int main(int argc, char *argv[]) {
                 conf >> v;
                 lb_mode = v;
                 std::cerr << "LB_MODE\t\t\t" << lb_mode << "\n";
+            } else if (key.compare("PACKET_LB_MODE") == 0) {
+                uint32_t v;
+                conf >> v;
+                packet_lb_mode = v;
+                std::cerr << "PACKET_LB_MODE\t\t\t" << packet_lb_mode << "\n";
             } else if (key.compare("SW_MONITORING_INTERVAL") == 0) {
                 uint32_t v;
                 conf >> v;
@@ -1910,6 +1916,7 @@ int main(int argc, char *argv[]) {
     Settings::host_num = node_num - switch_num;
     Settings::switch_num = switch_num;
     Settings::lb_mode = lb_mode;
+    Settings::packet_lb_mode = packet_lb_mode;
     Settings::packet_payload = packet_payload_size;
     // Settings::MTU = packet_payload_size + 48;  // for simplicity
     /*------------------------------------*/
@@ -2271,7 +2278,7 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    if (lb_mode == 20){
+    if (lb_mode == 20 || packet_lb_mode == 20){
         //更新每个交换机的接口与邻居id的关系
         for (const auto& outerPair : nbr2if) {
             ns3::Ptr<ns3::Node> SrcNode = outerPair.first;
@@ -2355,7 +2362,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (lb_mode == 20){
+    if (lb_mode == 20 || packet_lb_mode == 20){
         SetPathChoiceTables();
         SetBestPathCETables();
         SetACCPathCETables();
@@ -2409,7 +2416,7 @@ int main(int argc, char *argv[]) {
         }
     }
     //init TorSwitch_nodelist, hostId2ToRlist, SrcId2CurSrcToR
-    if (lb_mode == 3 || lb_mode == 6 || lb_mode == 9 || lb_mode == 10 || lb_mode == 12 || lb_mode == 20) {
+    if (lb_mode == 3 || lb_mode == 6 || lb_mode == 9 || lb_mode == 10 || lb_mode == 12 || lb_mode == 20 || packet_lb_mode == 20) {
         for (auto &pair : link_pairs) {
             Ptr<Node> probably_host = n.Get(pair.first);
             Ptr<Node> probably_switch = n.Get(pair.second);
@@ -2701,7 +2708,7 @@ int main(int argc, char *argv[]) {
         }
         Simulator::Schedule(Seconds(flowgen_stop_time + simulator_extra_time), dv_history_print);
     }
-    if (lb_mode == 20){
+    if (lb_mode == 20 || packet_lb_mode == 20){
         std::cout << "caver_dreTime: " << caver_dreTime << std::endl;
         std::cout << "caver_agingTime: " << caver_agingTime << std::endl;
         std::cout << "caver_quantizeBit: " << caver_quantizeBit << std::endl;

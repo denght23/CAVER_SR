@@ -26,7 +26,8 @@ lb_modes = {
     6: "letflow",
     9: "conweave",
     12: "hula",
-    20:"caver"
+    20:"caver",
+    32: "greedy",  # 新增的greedy模式
 }
 topo2bdp = {
     "leaf_spine_128_100G_OS2": 104000,  # 2-tier

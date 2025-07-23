@@ -15,7 +15,7 @@ import argparse
 from datetime import date
 
 # randomID
-random.seed(datetime.now())
+random.seed(datetime.now().timestamp())
 MAX_RAND_RANGE = 1000000000
 
 # config template
@@ -54,6 +54,7 @@ BUFFER_SIZE {buffer_size}
 
 CC_MODE {cc_mode}
 LB_MODE {lb_mode}
+PACKET_LB_MODE {packet_lb_mode}
 ENABLE_PFC {enabled_pfc}
 ENABLE_IRN {enabled_irn}
 
@@ -131,6 +132,19 @@ lb_modes = {
     "caver":20,
     "hula": 12,
     "noshare":21,
+    "greedy": 32,
+}
+packet_lb_modes = {
+    "fecmp": 0,
+    "drill": 2,
+    "conga": 3,
+    "letflow": 6,
+    "conweave": 9,
+    "dv":10,
+    "caver":20,
+    "hula": 12,
+    "noshare":21,
+    "greedy": 32,
 }
 
 topo2bdp = {
@@ -173,7 +187,9 @@ def main():
     parser.add_argument('--cc', dest='cc', action='store',
                         default='dcqcn', help="hpcc/dcqcn/timely/dctcp (default: dcqcn)")
     parser.add_argument('--lb', dest='lb', action='store',
-                        default='fecmp', help="fecmp/pecmp/drill/conga (default: fecmp)")
+                        default='fecmp', help="fecmp/caver (default: fecmp)")
+    parser.add_argument('--packet_lb', dest='packet_lb', action='store',
+                        default='fecmp', help="fecmp/greedy/drill/caver (default: fecmp)")
     parser.add_argument('--pfc', dest='pfc', action='store',
                         type=int, default=1, help="enable PFC (default: 1)")
     parser.add_argument('--irn', dest='irn', action='store',
@@ -244,6 +260,7 @@ def main():
     # input parameters
     cc_mode = cc_modes[args.cc]
     lb_mode = lb_modes[args.lb]
+    packet_lb_mode = packet_lb_modes[args.packet_lb]
     enabled_pfc = int(args.pfc)
     enabled_irn = int(args.irn)
     bw = int(args.bw)
@@ -391,11 +408,12 @@ def main():
     # record to history
     simulday = datetime.now().strftime("%m/%d/%y")
     with open("./mix/.history", "a") as history:
-        history.write("{simulday},{config_ID},{cc_mode},{lb_mode},{cwh_tx_expiry_time},{cwh_extra_reply_deadline},{cwh_path_pause_time},{cwh_extra_voq_flush_time},{cwh_default_voq_waiting_time},{pfc},{irn},{has_win},{var_win},{topo},{bw},{cdf},{load},{time}\n".format(
+        history.write("{simulday},{config_ID},{cc_mode},{lb_mode},{packet_lb_mode},{cwh_tx_expiry_time},{cwh_extra_reply_deadline},{cwh_path_pause_time},{cwh_extra_voq_flush_time},{cwh_default_voq_waiting_time},{pfc},{irn},{has_win},{var_win},{topo},{bw},{cdf},{load},{time}\n".format(
             simulday=simulday,
             config_ID=config_ID,
             cc_mode=cc_mode,
             lb_mode=lb_mode,
+            packet_lb_mode=packet_lb_mode,
             cwh_tx_expiry_time=cwh_tx_expiry_time,
             cwh_extra_reply_deadline=cwh_extra_reply_deadline,
             cwh_path_pause_time=cwh_path_pause_time,
@@ -443,7 +461,7 @@ def main():
         config = config_template.format(id=config_ID, topo=topo, flow=flow,
                                         qlen_mon_start=qlen_mon_start, qlen_mon_end=qlen_mon_end, flowgen_start_time=flowgen_start_time,
                                         flowgen_stop_time=flowgen_stop_time, sw_monitoring_interval=sw_monitoring_interval,
-                                        load=netload, buffer_size=buffer, lb_mode=lb_mode, cwh_tx_expiry_time=cwh_tx_expiry_time,
+                                        load=netload, buffer_size=buffer, lb_mode=lb_mode, packet_lb_mode=packet_lb_mode, cwh_tx_expiry_time=cwh_tx_expiry_time,
                                         cwh_extra_reply_deadline=cwh_extra_reply_deadline, cwh_default_voq_waiting_time=cwh_default_voq_waiting_time,
                                         cwh_path_pause_time=cwh_path_pause_time, cwh_extra_voq_flush_time=cwh_extra_voq_flush_time,
                                         enabled_pfc=enabled_pfc, enabled_irn=enabled_irn,

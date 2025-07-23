@@ -21,6 +21,7 @@ uint32_t Settings::ip_to_node_id(Ipv4Address ip) {
 
 /* others */
 uint32_t Settings::lb_mode = 0;
+uint32_t Settings::packet_lb_mode = 0;
 
 std::map<uint32_t, uint32_t> Settings::hostIp2IdMap;
 std::map<uint32_t, uint32_t> Settings::hostId2IpMap;

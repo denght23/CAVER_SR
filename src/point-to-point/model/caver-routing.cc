@@ -343,6 +343,31 @@ namespace ns3 {
                         std::cout << "Nodepass_log" << std::endl;
                         printf("flow id %d, src switch %d\n", flowid, m_switch_id);
                     }
+                    std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(ch.sip, ch.dip, ch.udp.sport, ch.udp.dport);
+                    auto it = Settings::reorderable.find(flow_key);
+                    bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
+                    if (flow_reorderable) {
+                        uint32_t outPort;
+                        // 若BestTable里存在表项，则选择BestTable里储存的下一跳；
+                        if (best_pathCE_Table[ch.dip]._valid){
+                            outPort = best_pathCE_Table[ch.dip]._path[0];
+                            udpTag.SetSrcRouteEnable(false);
+                            udpTag.SetPathId(0);
+                            udpTag.SetHopCount(0);
+                            p->AddPacketTag(udpTag);
+                            uint32_t X = UpdateLocalDre(p, ch, outPort);  // update local DRE
+                            DoSwitchSend(p, ch, outPort, ch.udp.pg);
+                            return;
+                        }
+                        else{//若BestTable里不存在表项，则选择队列最小端口作为下一跳；
+                            udpTag.SetSrcRouteEnable(false);
+                            udpTag.SetPathId(0);
+                            udpTag.SetHopCount(0);
+                            p->AddPacketTag(udpTag);
+                            DoSwitchSendToDev(p, ch);
+                            return;
+                        }
+                    }
                     struct Caver_Flowlet* flowlet = NULL;
                     auto flowletItr = m_flowletTable.find(qpkey);
                     if (flowletItr != m_flowletTable.end()){
@@ -511,6 +536,25 @@ namespace ns3 {
                 return;
             }
             // Agg/Core switch
+            std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(ch.sip, ch.dip, ch.udp.sport, ch.udp.dport);
+            auto it = Settings::reorderable.find(flow_key);
+            bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
+            uint32_t outPort;
+            if (flow_reorderable){
+                if (best_pathCE_Table[ch.dip]._valid){
+                    outPort = best_pathCE_Table[ch.dip]._path[0];
+                    p->AddPacketTag(udpTag);
+                    uint32_t X = UpdateLocalDre(p, ch, outPort);  // update local DRE
+                    DoSwitchSend(p, ch, outPort, ch.udp.pg);
+                    return;
+                }
+                else{
+                    p->AddPacketTag(udpTag);
+                    DoSwitchSendToDev(p, ch);
+                    return;
+                }
+            }
+
             assert(found && "If not ToR (leaf),CaverTag should be found");
             uint32_t hopCount = udpTag.GetHopCount() + 1;
             udpTag.SetHopCount(hopCount);

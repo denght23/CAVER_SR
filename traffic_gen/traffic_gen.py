@@ -6,10 +6,10 @@ from optparse import OptionParser
 from custom_rand import CustomRand
 print(sys.version)
 class Flow:
-	def __init__(self, src, dst, size, t):
-		self.src, self.dst, self.size, self.t = src, dst, size, t
+	def __init__(self, src, dst, size, t, reorder):
+		self.src, self.dst, self.size, self.t, self.reorder = src, dst, size, t, reorder
 	def __str__(self):
-		return "%d %d 3 %d %.9f"%(self.src, self.dst, self.size, self.t)
+		return "%d %d 3 %d %.9f %d"%(self.src, self.dst, self.size, self.t, self.reorder)
 
 def translate_bandwidth(b):
 	if b == None:
@@ -131,6 +131,10 @@ if __name__ == "__main__":
 		print("please use -n to enter number of hosts")
 		sys.exit(0)
 	nhost = int(options.nhost)
+	probabilities = [0.7, 0.3]
+
+	# 创建字典，key 是从 0 到 nhost-1 的数，value 是随机选择 0 或 1，概率分别为 70% 和 30%
+	random_dict = {i: random.choices([0, 1], weights=probabilities)[0] for i in range(nhost)}
 	load = float(options.load)
 	bandwidth = translate_bandwidth(options.bandwidth)
 	time = float(options.time)*1e9 # translates to ns
@@ -178,7 +182,7 @@ if __name__ == "__main__":
 			if size <= 0:
 				size = 1
 			#n_flow += 1
-			flows.append(Flow(src, dst, size, t * 1e-9))
+			flows.append(Flow(src, dst, size, t * 1e-9, random_dict[dst]))
 			heapq.heapreplace(host_list, (t + inter_t, src))
 
 	flows.sort(key=lambda x : x.t)

@@ -27,7 +27,7 @@
 namespace ns3 {
 
 NS_LOG_COMPONENT_DEFINE("RdmaHw");
-int test_scenario = 2; // 1: a, 2: b, 3: c
+int test_scenario = 0; // 1: a, 2: b, 3: c
 
 std::unordered_map<unsigned, unsigned> acc_timeout_count;
 uint64_t RdmaHw::nAllPkts = 0;

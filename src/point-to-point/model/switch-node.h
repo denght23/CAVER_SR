@@ -25,7 +25,8 @@ class SwitchNode : public Node {
     static const unsigned pCnt = 128;  // port 0 is not used so + 1	// Number of ports used
     uint32_t m_ecmpSeed;
     std::unordered_map<uint32_t, std::vector<int> >
-        m_rtTable;  // map from ip address (u32) to possible ECMP port (index of dev)
+        m_rtTable;  // map from ip address (u32) to possible ECMP port (index of dev) 
+        //这个是关于interface的路由表，key是目的IP地址，value是一个vector，里面存储了所有可能的出口端口索引
 
     // monitor uplinks
     uint64_t m_txBytes[pCnt];  // counter of tx bytes, for HPCC
@@ -55,6 +56,8 @@ class SwitchNode : public Node {
     // DRILL (lb_mode = 2)
     uint32_t DoLbDrill(Ptr<const Packet> p, const CustomHeader &ch,
                        const std::vector<int> &nexthops);     // choose egress port
+    uint32_t DoLbGreedy(Ptr<const Packet> p, const CustomHeader &ch,
+                                  const std::vector<int> &nexthops);  // choose egress port
     uint32_t m_drill_candidate;                               // always 2 (power of two)
     std::map<uint32_t, uint32_t> m_previousBestInterfaceMap;  // <dip, previousBestInterface>
     uint32_t CalculateInterfaceLoad(uint32_t interface);      // Get the load of a interface

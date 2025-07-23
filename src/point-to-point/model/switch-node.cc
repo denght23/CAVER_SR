@@ -195,6 +195,21 @@ uint32_t SwitchNode::DoLbDrill(Ptr<const Packet> p, const CustomHeader &ch,
     m_previousBestInterfaceMap[ch.dip] = leastLoadInterface;
     return leastLoadInterface;
 }
+uint32_t SwitchNode::DoLbGreedy(Ptr<const Packet> p, const CustomHeader &ch,
+                                  const std::vector<int> &nexthops) {
+    // find the Egress (output) link with the smallest local Egress Queue length
+    uint32_t leastLoadInterface = 0;
+    uint32_t leastLoad = std::numeric_limits<uint32_t>::max();
+    for (uint32_t i = 0; i < nexthops.size(); i++) {
+        uint32_t sampleLoad = CalculateInterfaceLoad(nexthops[i]);
+        if (sampleLoad < leastLoad) {
+            leastLoad = sampleLoad;
+            leastLoadInterface = nexthops[i];
+        }
+    }
+    return leastLoadInterface;
+}
+
 
 /*------------------ConWeave Dummy ----------------*/
 uint32_t SwitchNode::DoLbConWeave(Ptr<const Packet> p, const CustomHeader &ch,
@@ -319,39 +334,53 @@ void SwitchNode::SendToDev(Ptr<Packet> p, CustomHeader &ch) {
     if (!m_GlobaldreEvent.IsRunning()){
         m_GlobaldreEvent = Simulator::Schedule(Settings::Dre_time_map[GetId()], &SwitchNode::GlobalDreEvent, this);
     }
-    // Conga
-    if (Settings::lb_mode == 3) {
-        m_mmu->m_congaRouting.RouteInput(p, ch);
-        return;
-    }
+    std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(ch.sip, ch.dip, ch.udp.sport, ch.udp.dport);
+    auto it = Settings::reorderable.find(flow_key);
+    bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
+    if (flow_reorderable){
 
-    // ConWeave
-    if (Settings::lb_mode == 9) {
-        m_mmu->m_conweaveRouting.RouteInput(p, ch);
-        return;
-    }
+        // Conga
+        if (Settings::lb_mode == 3) {
+            m_mmu->m_congaRouting.RouteInput(p, ch);
+            return;
+        }
 
-    if (Settings::lb_mode == 10) {
-        m_mmu->m_dvRouting.RouteInput(p, ch);
-        return;
-    }
+        // ConWeave
+        if (Settings::lb_mode == 9) {
+            m_mmu->m_conweaveRouting.RouteInput(p, ch);
+            return;
+        }
 
-    if(Settings::lb_mode == 20){
-        m_mmu->m_caverRouting.RouteInput(p, ch);
-        return;
-    }
-    //hula
-    if (Settings::lb_mode == 12) {
-        m_mmu->m_hulaRouting.RouteInput(p, ch);
-        return;
-    }
-    if(Settings::lb_mode == 21){
-        m_mmu->m_noshareRouting.RouteInput(p, ch);
-        return;
-    }
+        if (Settings::lb_mode == 10) {
+            m_mmu->m_dvRouting.RouteInput(p, ch);
+            return;
+        }
 
-    // Others
-    SendToDevContinue(p, ch);
+        if(Settings::lb_mode == 20){
+            m_mmu->m_caverRouting.RouteInput(p, ch);
+            return;
+        }
+        //hula
+        if (Settings::lb_mode == 12) {
+            m_mmu->m_hulaRouting.RouteInput(p, ch);
+            return;
+        }
+        if(Settings::lb_mode == 21){
+            m_mmu->m_noshareRouting.RouteInput(p, ch);
+            return;
+        }
+
+        // Others
+        SendToDevContinue(p, ch);
+    }
+    else{
+        if(Settings::packet_lb_mode == 20){
+            m_mmu->m_caverRouting.RouteInput(p, ch);
+            return;
+        }
+        // Others
+        SendToDevContinue(p, ch);
+    }
 }
 
 void SwitchNode::SendToDevContinue(Ptr<Packet> p, CustomHeader &ch) {
@@ -382,7 +411,7 @@ void SwitchNode::SendToDevContinue(Ptr<Packet> p, CustomHeader &ch) {
             }
         }
         // 如果是采用Caver的方法，且是UdP包的话，则应该更新一下Dre
-        if (Settings::lb_mode == 20 and ch.l3Prot == 0x11) {
+        if ((Settings::lb_mode == 20 && ch.l3Prot == 0x11) || (Settings::packet_lb_mode == 20 && ch.l3Prot == 0x11)) {
             m_mmu->m_caverRouting.UpdateLocalDre(p, ch, idx);
             if (m_mmu->m_caverRouting.DreTable_log){
                 if (m_isToR)
@@ -487,31 +516,54 @@ int SwitchNode::GetOutDev(Ptr<Packet> p, CustomHeader &ch) {
     bool control_pkt =
         (ch.l3Prot == 0xFF || ch.l3Prot == 0xFE || ch.l3Prot == 0xFD || ch.l3Prot == 0xFC);
 
-    if (Settings::lb_mode == 0 || control_pkt) {  // control packet (ACK, NACK, PFC, QCN)
-        return DoLbFlowECMP(p, ch, nexthops);     // ECMP routing path decision (4-tuple)
+    std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(ch.sip, ch.dip, ch.udp.sport, ch.udp.dport);
+    auto it = Settings::reorderable.find(flow_key);
+    bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
+    if (flow_reorderable){
+        if (Settings::lb_mode == 0 || control_pkt) {  // control packet (ACK, NACK, PFC, QCN)
+            return DoLbFlowECMP(p, ch, nexthops);     // ECMP routing path decision (4-tuple)
+        }
+        switch (Settings::lb_mode) {
+            case 2:
+                return DoLbDrill(p, ch, nexthops);
+            case 3:
+                return DoLbConga(p, ch, nexthops); /** DUMMY: Do ECMP */
+            case 6:
+                return DoLbLetflow(p, ch, nexthops);
+            case 9:
+                return DoLbConWeave(p, ch, nexthops); /** DUMMY: Do ECMP */
+            case 10:
+                return DoLbDV(p, ch, nexthops); /** DUMMY: Do ECMP */
+            case 20:
+                return DoLbCaver(p, ch, nexthops); /** DUMMY: Do ECMP */
+            case 21:
+                return DoLbNoshare(p, ch, nexthops); /** DUMMY: Do ECMP */
+            case 12:
+                return DoLbHula(p, ch, nexthops);
+            case 32:
+                return DoLbGreedy(p, ch, nexthops); /** DUMMY: Do ECMP */
+            default:
+                std::cout << "Unknown lb_mode(" << Settings::lb_mode << ")" << std::endl;
+                assert(false);
+        }
+    }
+    else{
+        switch (Settings::packet_lb_mode){
+            if (Settings::packet_lb_mode == 0 || control_pkt) {  // control packet (ACK, NACK, PFC, QCN)
+                return DoLbFlowECMP(p, ch, nexthops);     // ECMP routing path decision (4-tuple)
+            }
+            case 2:
+                return DoLbDrill(p, ch, nexthops);
+            case 32:
+                return DoLbGreedy(p, ch, nexthops); /** DUMMY: Do ECMP */
+            case 20:
+                return DoLbGreedy(p, ch, nexthops); /** DUMMY: Do ECMP */
+            default:
+                std::cout << "Unknown packet_lb_mode(" << Settings::packet_lb_mode << ")" << std::endl;
+                assert(false);
+        }
     }
 
-    switch (Settings::lb_mode) {
-        case 2:
-            return DoLbDrill(p, ch, nexthops);
-        case 3:
-            return DoLbConga(p, ch, nexthops); /** DUMMY: Do ECMP */
-        case 6:
-            return DoLbLetflow(p, ch, nexthops);
-        case 9:
-            return DoLbConWeave(p, ch, nexthops); /** DUMMY: Do ECMP */
-        case 10:
-            return DoLbDV(p, ch, nexthops); /** DUMMY: Do ECMP */
-        case 20:
-            return DoLbCaver(p, ch, nexthops); /** DUMMY: Do ECMP */
-        case 21:
-            return DoLbNoshare(p, ch, nexthops); /** DUMMY: Do ECMP */
-        case 12:
-            return DoLbHula(p, ch, nexthops);
-        default:
-            std::cout << "Unknown lb_mode(" << Settings::lb_mode << ")" << std::endl;
-            assert(false);
-    }
 }
 
 /*

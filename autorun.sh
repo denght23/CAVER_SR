@@ -31,16 +31,25 @@ fi
 # Lossless RDMA
 cecho "GREEN" "Run Lossless RDMA experiments..."
 if [ -z "$3" ]; then
-    lb_modes=("caver" "conga" "conweave" "hula" "fecmp") # "dv" "noshare" 
+    # lb_modes=("caver" "conga" "conweave" "hula" "fecmp") # "dv" "noshare" 
+    lb_modes = ("fecmp")
 else
-    lb_modes=("caver")
+    lb_modes=("$3")
 fi
+if [-z "$4"]; then 
+    packet_lb_mode = "fecmp"
+else
+    packet_lb_mode = "$4"
+fi
+  
+
+
 for lb_mode in "${lb_modes[@]}"; do
   cecho "GREEN" "Run $lb_mode RDMA experiments..."
 
   echo -n "$lb_mode:$(cat mix/index.txt)," >> ./mix/autorun_history.txt
 
-  python3 run.py --lb $lb_mode --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload ${NETLOAD} --topo ${TOPOLOGY} 2>&1 > /dev/null &
+  python3 run.py --lb $lb_mode --packet_lb $packet_lb_mode --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload ${NETLOAD} --topo ${TOPOLOGY} 2>&1 > /dev/null &
   #python3 run.py --lb $lb_mode --pfc 1 --irn 0 --simul_time 0.1 --netload 50 --topo fat_k8_100G_OS1 --my_flow llm_flow 2>&1 > /dev/null &
   #python3 run.py --lb $lb_mode --pfc 1 --irn 0 --simul_time 0.03 --netload 60 --topo fat_k8_100G_OS2 --my_flow incast300 2>&1 > /dev/null &
   sleep 10

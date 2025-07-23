@@ -168,6 +168,7 @@ class Settings {
     /* load balancer */
     // 0: flow ECMP, 2: DRILL, 3: Conga, 4: ConWeave
     static uint32_t lb_mode;
+    static uint32_t packet_lb_mode;
 
     // for common setting
     static uint32_t packet_payload;
