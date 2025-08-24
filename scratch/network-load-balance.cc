@@ -2945,7 +2945,7 @@ if (lb_mode == 21){
 
     Simulator::Schedule(Seconds(flowgen_start_time), &m_rx_periodic_monitoring, uplink_rx_output,
                         downlink_rx_output, flow_rx_output);
-    Simulator::Schedule(Seconds(flowgen_start_time), &m_QP_rate_monitoring, bps_tx_output);
+    // Simulator::Schedule(Seconds(flowgen_start_time), &m_QP_rate_monitoring, bps_tx_output);
 
     if (global_ce_log){
         //Settings::read_static_path("config/my_path.txt");
