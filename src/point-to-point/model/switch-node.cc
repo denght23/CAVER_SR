@@ -548,10 +548,10 @@ int SwitchNode::GetOutDev(Ptr<Packet> p, CustomHeader &ch) {
         }
     }
     else{
+        if (Settings::packet_lb_mode == 0 || control_pkt) {  // control packet (ACK, NACK, PFC, QCN)
+            return DoLbFlowECMP(p, ch, nexthops);     // ECMP routing path decision (4-tuple)
+        }
         switch (Settings::packet_lb_mode){
-            if (Settings::packet_lb_mode == 0 || control_pkt) {  // control packet (ACK, NACK, PFC, QCN)
-                return DoLbFlowECMP(p, ch, nexthops);     // ECMP routing path decision (4-tuple)
-            }
             case 2:
                 return DoLbDrill(p, ch, nexthops);
             case 32:

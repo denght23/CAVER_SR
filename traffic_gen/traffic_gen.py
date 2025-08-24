@@ -131,9 +131,10 @@ if __name__ == "__main__":
 		print("please use -n to enter number of hosts")
 		sys.exit(0)
 	nhost = int(options.nhost)
-	probabilities = [0.7, 0.3]
+	# probabilities = [0.7, 0.3]
+	probabilities = [1, 0]
 
-	# 创建字典，key 是从 0 到 nhost-1 的数，value 是随机选择 0 或 1，概率分别为 70% 和 30%
+	# 创建字典，key 是从 0 到 nhost-1 的数，value 是随机选择 0 或 1，概率分别为 70% 和 30%, 0表示go-back-n，1表示选择性重传
 	random_dict = {i: random.choices([0, 1], weights=probabilities)[0] for i in range(nhost)}
 	load = float(options.load)
 	bandwidth = translate_bandwidth(options.bandwidth)

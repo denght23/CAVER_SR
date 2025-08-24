@@ -952,12 +952,15 @@ void qp_finish(FILE *fout, Ptr<RdmaQueuePair> q) {
     Ptr<Node> dstNode = n.Get(did);
     Ptr<RdmaDriver> rdma = dstNode->GetObject<RdmaDriver>();
     rdma->m_rdma->DeleteRxQp(q->sip.Get(), q->sport, q->dport, q->m_pg);
+    std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(Settings::hostId2IpMap[Settings::ip_to_node_id(q->sip)], Settings::hostId2IpMap[Settings::ip_to_node_id(q->dip)], q->sport, q->dport);
+    auto it = Settings::reorderable.find(flow_key);
+    bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
 
     // fprintf(fout, "%lu QP complete\n", Simulator::Now().GetTimeStep());
-    fprintf(fout, "%u %u %u %u %lu %lu %lu %lu\n", Settings::ip_to_node_id(q->sip),
+    fprintf(fout, "%u %u %u %u %lu %lu %lu %lu %d\n", Settings::ip_to_node_id(q->sip),
             Settings::ip_to_node_id(q->dip), q->sport, q->dport, q->m_size,
             q->startTime.GetTimeStep(), (Simulator::Now() - q->startTime).GetTimeStep(),
-            standalone_fct);
+            standalone_fct, flow_reorderable);
 
     // for debugging
     NS_LOG_DEBUG("%u %u %u %u %lu %lu %lu %lu\n" %
