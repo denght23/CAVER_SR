@@ -73,6 +73,12 @@ RdmaQueuePair::RdmaQueuePair(uint16_t pg, Ipv4Address _sip, Ipv4Address _dip, ui
     irn.m_max_seq = 0;
     irn.m_recovery = false;
 
+    /******************************
+     * SR-specific functions/vars
+     *****************************/
+    sr.m_enabled = false; 
+    sr.m_recovery = false;
+
     m_timeout = MilliSeconds(4);
 }
 
@@ -98,6 +104,15 @@ uint64_t RdmaQueuePair::GetBytesLeft() {
             if (snd_nxt == sack_seq) {
                 snd_nxt += sack_sz;
                 irn.m_sack.discardUpTo(snd_nxt);
+            }
+        }
+    }
+    if (sr.m_enabled){
+        uint32_t sack_seq, sack_sz;
+        if (sr.m_sack.peekFrontBlock(&sack_seq, &sack_sz)) {
+            if (snd_nxt == sack_seq) {
+                snd_nxt += sack_sz;
+                sr.m_sack.discardUpTo(snd_nxt);
             }
         }
     }
@@ -167,6 +182,15 @@ bool RdmaQueuePair::IsFinished() {
             if (snd_nxt == sack_seq) {
                 snd_nxt += sack_sz;
                 irn.m_sack.discardUpTo(snd_nxt);
+            }
+        }
+    }
+    if (sr.m_enabled){
+        uint32_t sack_seq, sack_sz;
+        if (sr.m_sack.peekFrontBlock(&sack_seq, &sack_sz)) {
+            if (snd_nxt == sack_seq) {
+                snd_nxt += sack_sz;
+                sr.m_sack.discardUpTo(snd_nxt);
             }
         }
     }
@@ -242,6 +266,7 @@ IrnSackManager::IrnSackManager() {}
 
 IrnSackManager::IrnSackManager(int flow_id) { socketId = flow_id; }
 
+
 std::ostream& operator<<(std::ostream& os, const IrnSackManager& im) {
     auto it = im.m_data.begin();
     for (; it != im.m_data.end(); ++it) {
@@ -253,6 +278,19 @@ std::ostream& operator<<(std::ostream& os, const IrnSackManager& im) {
 }
 
 // put blocks
+//
+// Inserts a new data block (specified by seq and sz) into the m_data structure.
+//
+// This function handles the insertion of a new block into the `m_data` map, considering 
+// various cases of overlap or inclusion with existing blocks. It also handles:
+// - Splitting existing blocks if necessary.
+// - Inserting non-overlapping blocks.
+// - Merging adjacent blocks to remove gaps.
+//
+// The final result is that `m_data` will contain non-overlapping, sorted blocks with no empty spaces.
+//
+// @param seq The starting sequence number of the block.
+// @param sz The size of the block.
 void IrnSackManager::sack(uint32_t seq, uint32_t sz) {
     if (!sz) return;
     NS_LOG_LOGIC("Flow " << socketId << " : Inserting Block " << seq << "-" << (seq + sz));
@@ -330,6 +368,17 @@ void IrnSackManager::sack(uint32_t seq, uint32_t sz) {
 }
 
 // put into return number of blocks removed
+//
+// Discards (removes) data blocks up to the specified cumulative acknowledgment (cumAck).
+// The function iterates through the m_data map and deletes the blocks that are fully or partially 
+// acknowledged by the cumAck. The function handles three cases:
+// 1. Entire blocks that are completely below cumAck are removed.
+// 2. Part of a block that is below cumAck is removed, and the remaining part is adjusted.
+// 3. Blocks that are fully beyond cumAck are left intact.
+// The function stops deleting once it encounters a block that starts after cumAck.
+//
+// @param cumAck The cumulative acknowledgment sequence number.
+// @return The total size of the blocks that were removed.
 size_t IrnSackManager::discardUpTo(uint32_t cumAck) {
     auto it = m_data.begin();
     size_t erase_len = 0;
@@ -369,6 +418,15 @@ bool IrnSackManager::blockExists(uint32_t seq, uint32_t size) {
     }
     return false;
 }
+// Peeks at the front (first) block in the m_data map without removing it.
+// The function retrieves the sequence number and size of the first block in m_data, 
+// storing them in the provided pointers pseq and psize. If m_data is empty, 
+// it sets pseq and psize to 0 and returns false. Otherwise, it returns true 
+// and updates the pointers with the sequence number and size of the first block.
+//
+// @param pseq Pointer to store the sequence number of the first block.
+// @param psize Pointer to store the size of the first block.
+// @return true if a block exists, false if m_data is empty.
 bool IrnSackManager::peekFrontBlock(uint32_t* pseq, uint32_t* psize) {
     NS_ASSERT(pseq);
     NS_ASSERT(psize);
@@ -392,6 +450,21 @@ size_t IrnSackManager::getSackBufferOverhead() {
         overhead += it->second;  // Bytes
     }
     return overhead;
+}
+// Advance snd_nxt to the end of a block if it falls within that block.
+// @param snd_nxt [in,out] The sequence number to check and possibly advance.
+// @return true if snd_nxt was updated, false otherwise.
+uint64_t IrnSackManager::advanceToBlockEnd(uint64_t snd_nxt) {
+    for (auto &block : m_data) {
+        uint32_t blockBegin = block.first;            // inclusive
+        uint32_t blockEnd = block.first + block.second; // exclusive
+
+        if (blockBegin <= snd_nxt && snd_nxt < blockEnd) {
+            // snd_nxt is inside this block
+            snd_nxt = blockEnd;
+        }
+    }
+    return snd_nxt;
 }
 
 }  // namespace ns3

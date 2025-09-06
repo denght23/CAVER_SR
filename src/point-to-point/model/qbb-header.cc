@@ -56,6 +56,12 @@ namespace ns3 {
 	void qbbHeader::SetIrnNackSize(size_t sz){
 		m_irn_nack_size = (uint16_t)sz;
 	}
+	void qbbHeader::SetSrSeq(uint32_t seq){
+		m_sr_nack = seq;
+	}
+  	void qbbHeader::SetSrSize(size_t sz){
+		m_sr_nack_size = (uint16_t)sz;
+	}
 
 	uint16_t qbbHeader::GetPG() const
 	{
@@ -87,6 +93,12 @@ namespace ns3 {
 	size_t qbbHeader::GetIrnNackSize() const{
 		return (size_t) m_irn_nack_size;
 	}
+	uint32_t qbbHeader::GetSrNack() const{
+		return m_sr_nack;
+	}
+	uint16_t qbbHeader::GetSrNackSize() const{
+		return  m_sr_nack_size;
+	}
 
 	TypeId
 		qbbHeader::GetTypeId(void)
@@ -112,7 +124,7 @@ namespace ns3 {
 	}
 	uint32_t qbbHeader::GetBaseSize() {
 		qbbHeader tmp;
-		return sizeof(tmp.sport) + sizeof(tmp.dport) + sizeof(tmp.flags) + sizeof(tmp.m_pg) + sizeof(tmp.m_seq) + sizeof(tmp.m_irn_nack) + sizeof(tmp.m_irn_nack_size);
+		return sizeof(tmp.sport) + sizeof(tmp.dport) + sizeof(tmp.flags) + sizeof(tmp.m_pg) + sizeof(tmp.m_seq) + sizeof(tmp.m_irn_nack) + sizeof(tmp.m_irn_nack_size) + sizeof(tmp.m_sr_nack) + sizeof(tmp.m_sr_nack_size);
 	}
 	void qbbHeader::Serialize(Buffer::Iterator start)  const
 	{
@@ -124,6 +136,8 @@ namespace ns3 {
 		i.WriteU32(m_seq);
 		i.WriteU32(m_irn_nack);
 		i.WriteU16(m_irn_nack_size);
+		i.WriteU32(m_sr_nack);
+		i.WriteU16(m_sr_nack_size);
 
 		// write IntHeader
 		ih.Serialize(i);
@@ -139,6 +153,8 @@ namespace ns3 {
 		m_seq = i.ReadU32();
 		m_irn_nack = i.ReadU32();
 		m_irn_nack_size = i.ReadU16();
+		m_sr_nack = i.ReadU32();
+		m_sr_nack_size = i.ReadU16();
 
 		// read IntHeader
 		ih.Deserialize(i);

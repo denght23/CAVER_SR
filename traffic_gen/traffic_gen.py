@@ -4,6 +4,8 @@ import math
 import heapq
 from optparse import OptionParser
 from custom_rand import CustomRand
+import json
+import os
 print(sys.version)
 class Flow:
 	def __init__(self, src, dst, size, t, reorder):
@@ -131,11 +133,12 @@ if __name__ == "__main__":
 		print("please use -n to enter number of hosts")
 		sys.exit(0)
 	nhost = int(options.nhost)
-	# probabilities = [0.7, 0.3]
-	probabilities = [1, 0]
+	probabilities = [0.15, 0.85]
+	# probabilities = [1, 0]
 
-	# 创建字典，key 是从 0 到 nhost-1 的数，value 是随机选择 0 或 1，概率分别为 70% 和 30%, 0表示go-back-n，1表示选择性重传
+	# 创建字典，key 是从 0 到 nhost-1 的数，value 是随机选择 0 或 1，概率分别为 70% 和 30%, 0表示go-back-n（逐流），1表示选择性重传（逐包）
 	random_dict = {i: random.choices([0, 1], weights=probabilities)[0] for i in range(nhost)}
+	
 	load = float(options.load)
 	bandwidth = translate_bandwidth(options.bandwidth)
 	time = float(options.time)*1e9 # translates to ns
@@ -143,6 +146,12 @@ if __name__ == "__main__":
 	if bandwidth == None:
 		print("bandwidth format incorrect")
 		sys.exit(0)
+
+	#################SR-specific functions/vars###################
+	txt_output = os.path.splitext(output)[0] + "_SR_host.txt"
+	with open(txt_output, "w") as tf:
+		keys_with_1 = [str(k) for k, v in random_dict.items() if v == 1]
+		tf.write(" ".join(keys_with_1) + "\n")
 
 	fileName = options.cdf_file
 	file = open(fileName,"r")

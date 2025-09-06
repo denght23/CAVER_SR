@@ -43,6 +43,8 @@ public:
   void SetIntHeader(const IntHeader &_ih);
   void SetIrnNack(uint32_t seq);
   void SetIrnNackSize(size_t sz);
+  void SetSrSeq(uint32_t seq);
+  void SetSrSize(size_t sz);
 
 //Getters
   /**
@@ -57,6 +59,8 @@ public:
   uint8_t GetCnp() const;
   uint32_t GetIrnNack() const;
   size_t GetIrnNackSize() const;
+  uint32_t GetSrNack() const;
+	uint16_t GetSrNackSize() const;
 
   static TypeId GetTypeId (void);
   virtual TypeId GetInstanceTypeId (void) const;
@@ -74,6 +78,8 @@ private:
   IntHeader ih;
   uint32_t m_irn_nack;
   uint16_t m_irn_nack_size;
+  uint32_t m_sr_nack;
+  uint16_t m_sr_nack_size;
   bool enable_irn;
 };
 

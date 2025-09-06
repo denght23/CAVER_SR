@@ -32,6 +32,9 @@ int test_scenario = 0; // 1: a, 2: b, 3: c
 std::unordered_map<unsigned, unsigned> acc_timeout_count;
 uint64_t RdmaHw::nAllPkts = 0;
 
+FILE* RdmaHw::m_qpStatFile = nullptr;
+bool RdmaHw::m_qpStatEnabled = false;
+
 TypeId RdmaHw::GetTypeId(void) {
     static TypeId tid =
         TypeId("ns3::RdmaHw")
@@ -131,7 +134,16 @@ TypeId RdmaHw::GetTypeId(void) {
                           MakeUintegerAccessor(&RdmaHw::m_irn_bdp), MakeUintegerChecker<uint32_t>())
             .AddAttribute("L2Timeout", "Sender's timer of waiting for the ack",
                           TimeValue(MilliSeconds(4)), MakeTimeAccessor(&RdmaHw::m_waitAckTimeout),
-                          MakeTimeChecker());
+                          MakeTimeChecker())
+            .AddAttribute("SrEnable", "Enable Selective Repeat (SR) mode", BooleanValue(false),
+                          MakeBooleanAccessor(&RdmaHw::m_SR), MakeBooleanChecker())
+            .AddAttribute("SrWindow", "SR window size", UintegerValue(64000),
+                          MakeUintegerAccessor(&RdmaHw::m_SR_window), MakeUintegerChecker<uint32_t>())
+            .AddAttribute("SrTimeout", "SR timeout value", TimeValue(MicroSeconds(200)),
+                          MakeTimeAccessor(&RdmaHw::m_SR_timeout), MakeTimeChecker())
+            .AddAttribute("SRLog", "Enable SR receiver logs", BooleanValue(false),
+                        MakeBooleanAccessor(&RdmaHw::m_srLog), MakeBooleanChecker());
+            
     return tid;
 }
 
@@ -139,6 +151,12 @@ RdmaHw::RdmaHw() {
     cnp_total = 0;
     cnp_by_ecn = 0;
     cnp_by_ooo = 0;
+
+    /******************************
+     * SR-specific functions/vars
+     *****************************/
+    m_SR_timeout = MicroSeconds(200);
+    m_srLog = false;
 }
 
 void RdmaHw::SetNode(Ptr<Node> node) { m_node = node; }
@@ -218,6 +236,11 @@ void RdmaHw::AddQueuePair(uint64_t size, uint16_t pg, Ipv4Address sip, Ipv4Addre
         qp->irn.m_rtoHigh = m_irn_rtoHigh;
     }
 
+    if (m_SR) {
+        qp->sr.m_enabled = m_SR;
+        qp->sr.m_recovery = false;
+    }
+
     // add qp
     uint32_t nic_idx = GetNicIdxOfQp(qp);
     //std::cout << "node: " << m_node->GetId() << " flow id : " << qp->m_flow_id <<" nic_idx: " << nic_idx << std::endl;
@@ -242,7 +265,23 @@ void RdmaHw::AddQueuePair(uint64_t size, uint16_t pg, Ipv4Address sip, Ipv4Addre
     }
 
     // Notify Nic
+    qp->stat.startTime = Simulator::Now();
+    qp->stat.txTotalPkts = 0;
+    qp->stat.txTotalBytes = 0;
+    qp->stat.txDataBytes = 0;
     m_nic[nic_idx].dev->NewQp(qp);
+
+    if (m_srLog) {
+        std::cout << "[AddQueuePair] node=" << m_node->GetId()
+                  << " flow=" << qp->m_flow_id
+                  << " size=" << size
+                  << " win=" << win
+                  << " baseRtt=" << baseRtt
+                  << " SR_enabled=" << m_SR
+                  << " IRN_enabled=" << m_irn
+                  << std::endl;
+    }
+    
 }
 
 void RdmaHw::DeleteQueuePair(Ptr<RdmaQueuePair> qp) {
@@ -335,29 +374,7 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch) {
     std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(ch.sip, ch.dip, ch.udp.sport, ch.udp.dport);
     auto it = Settings::reorderable.find(flow_key);
     rxQp->m_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
-    // 模拟单元测试场景，后续可根据需要删除或调整
-    if (rxQp->m_reorderable) {
-        uint32_t original_seq = ch.udp.seq;
-        if (test_scenario == 1) { // 场景 a: 交换 4000 和 7000
-            if (original_seq == 4000) {
-                ch.udp.seq = 7000;
-                std::cout << "Test a: Changed seq from 4000 to 7000 at time " << Simulator::Now().GetSeconds()<<std::endl;
-            } else if (original_seq == 7000) {
-                ch.udp.seq = 4000;
-                std::cout << "Test a: Changed seq from 7000 to 4000 at time " << Simulator::Now().GetSeconds()<<std::endl;
-            }
-        } else if (test_scenario == 2) { // 场景 b: 丢弃 4000
-            if (original_seq == 4000) {
-                std::cout << "Test b: Dropped packet with seq 4000 at time " << Simulator::Now().GetSeconds()<<std::endl;
-                return 0; // 丢弃报文
-            }
-        } else if (test_scenario == 3) { // 场景 c: 将 4000 改为 80000
-            if (original_seq == 4000) {
-                ch.udp.seq = 80000;
-                std::cout << "Test c: Changed seq from 4000 to 80000 at time " << Simulator::Now().GetSeconds()<<std::endl;
-            }
-        }
-    }
+
     uint32_t seq = ch.udp.seq;
     uint32_t mtu = m_mtu;  // 从 RdmaHw 的 m_mtu 获取
     uint32_t window_end = rxQp->m_window_start + 64 * mtu;
@@ -382,64 +399,93 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch) {
     bool cnp_check = false;
     int x = 1;  // 默认正常
 
-    if (rxQp->m_reorderable) {
-        // 支持重排的逻辑
-        if (seq == rxQp->ReceiverNextExpectedSeq) {
-            // 顺序包：处理并前进窗口
-            rxQp->ReceiverNextExpectedSeq += payload_size;
-            rxQp->m_window_start = rxQp->ReceiverNextExpectedSeq;  // 向后移动窗口到下一个未接收报文
-            // 处理缓冲区中连续的包
-            while (!rxQp->m_reorder_buffer.empty() && rxQp->m_reorder_buffer.begin()->first == rxQp->ReceiverNextExpectedSeq) {
-                Ptr<Packet> buffered_p = rxQp->m_reorder_buffer.begin()->second;
-                CustomHeader buffered_ch;
-                buffered_p->PeekHeader(buffered_ch);
-                uint32_t buffered_size = buffered_p->GetSize() - buffered_ch.GetSerializedSize();
-                rxQp->ReceiverNextExpectedSeq += buffered_size;
-                rxQp->m_reorder_buffer.erase(rxQp->m_reorder_buffer.begin());
-            }
-            // 重置并启动计时器
-            if (rxQp->m_window_timer.IsRunning()) {
-                rxQp->m_window_timer.Cancel();
-            }
-            rxQp->m_window_timer = Simulator::Schedule(rxQp->m_window_timeout, &RdmaHw::HandleWindowTimeout, this, rxQp);
-        } else if (seq > rxQp->ReceiverNextExpectedSeq && seq < window_end) {
-            // 乱序包：在窗口内，放入缓冲区
-        if (rxQp->m_reorder_buffer.size() >= rxQp->m_max_buffer_size) {
-            // 处理缓冲区溢出，例如丢弃最旧的包
-            rxQp->m_reorder_buffer.erase(rxQp->m_reorder_buffer.begin());
-        }
-        rxQp->m_reorder_buffer[seq] = p->Copy();
-        x = 2;  // 标记为乱序
-        } else if (seq >= window_end) {
-            // 超出窗口：NACK 并 go-back-n 到窗口末端
-            rxQp->ReceiverNextExpectedSeq = window_end;
-            rxQp->m_window_start = window_end;
-            rxQp->m_reorder_buffer.clear();
-            x = 4;  // 标记为超出窗口
-        } else {
-            // 重复或过旧包：忽略或 NACK
-            x = 3;
-        }
-    } else {
-        // 不支持重排：原有检查逻辑
+
+    if(m_SR){
+        x = Receiver_SR_CheckSeq(seq, rxQp, payload_size, cnp_check);
+    }
+    else{
         x = ReceiverCheckSeq(seq, rxQp, payload_size, cnp_check);
     }
 
-    // 在重排逻辑后添加日志查看重排结果
-    if (rxQp->m_reorderable && x == 1) {
-        NS_LOG_INFO("Packet processed successfully  (seq " << seq << ") successfully reordered, next expected: " << rxQp->ReceiverNextExpectedSeq);
-    }
 
-    uint32_t glb_flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
-    if (rxQp->ReceiverNextExpectedSeq >= Settings::FlowId2Length[glb_flow_id] && x == 5) { //已经全部发完
-        //printf("Receive Last Packet, FlowId:%d, Length:%u, x=%d\n", rxQp->m_flow_id, Settings::FlowId2Length[glb_flow_id], x);
-        x = 1;
-    }
-    if (x == 2 || x == 4) {
-        printf("[%ld]超序，Flow:%u, 期待Seq：%u，当前Seq:%u\n", Simulator::Now().GetNanoSeconds(), glb_flow_id, rxQp->ReceiverNextExpectedSeq, ch.udp.seq);
-        fflush(stdout);
-        //exit(-1);
-    }
+
+    // if (rxQp->m_reorderable) {
+    //     if (m_SR){
+    //         /******************************
+    //          * SR-specific functions/vars
+    //          *****************************/
+    //         x = Receiver_SR_CheckSeq(seq, rxQp, payload_size, cnp_check);
+    //     }
+    //     else{
+    //         // 支持重排的逻辑
+    //         if (seq == rxQp->ReceiverNextExpectedSeq) {
+    //             // 顺序包：处理并前进窗口
+    //             rxQp->ReceiverNextExpectedSeq += payload_size;
+    //             rxQp->m_window_start = rxQp->ReceiverNextExpectedSeq;  // 向后移动窗口到下一个未接收报文
+    //             // 处理缓冲区中连续的包
+    //             while (!rxQp->m_reorder_buffer.empty() && rxQp->m_reorder_buffer.begin()->first == rxQp->ReceiverNextExpectedSeq) {
+    //                 Ptr<Packet> buffered_p = rxQp->m_reorder_buffer.begin()->second;
+    //                 CustomHeader buffered_ch;
+    //                 buffered_p->PeekHeader(buffered_ch);
+    //                 uint32_t buffered_size = buffered_p->GetSize() - buffered_ch.GetSerializedSize();
+    //                 rxQp->ReceiverNextExpectedSeq += buffered_size;
+    //                 rxQp->m_reorder_buffer.erase(rxQp->m_reorder_buffer.begin());
+    //             }
+    //             // 重置并启动计时器
+    //             if (rxQp->m_window_timer.IsRunning()) {
+    //                 rxQp->m_window_timer.Cancel();
+    //             }
+    //             rxQp->m_window_timer = Simulator::Schedule(rxQp->m_window_timeout, &RdmaHw::HandleWindowTimeout, this, rxQp);
+    //         } else if (seq > rxQp->ReceiverNextExpectedSeq && seq < window_end) {
+    //             // 乱序包：在窗口内，放入缓冲区
+    //         if (rxQp->m_reorder_buffer.size() >= rxQp->m_max_buffer_size) {
+    //             // 处理缓冲区溢出，例如丢弃最旧的包
+    //             rxQp->m_reorder_buffer.erase(rxQp->m_reorder_buffer.begin());
+    //         }
+    //         rxQp->m_reorder_buffer[seq] = p->Copy();
+    //         x = 2;  // 标记为乱序
+    //         } else if (seq >= window_end) {
+    //             // 超出窗口：NACK 并 go-back-n 到窗口末端
+    //             rxQp->ReceiverNextExpectedSeq = window_end;
+    //             rxQp->m_window_start = window_end;
+    //             rxQp->m_reorder_buffer.clear();
+    //             x = 4;  // 标记为超出窗口
+    //         } else {
+    //             // 重复或过旧包：忽略或 NACK
+    //             x = 3;
+    //         }
+    //     }
+    // } else {
+    //     // 不支持重排：原有检查逻辑
+    //     x = ReceiverCheckSeq(seq, rxQp, payload_size, cnp_check);
+    // }
+
+
+
+
+    // if (m_SR){
+    // } else{
+    //      // 在重排逻辑后添加日志查看重排结果
+    //     if (rxQp->m_reorderable && x == 1) {
+    //         NS_LOG_INFO("Packet processed successfully  (seq " << seq << ") successfully reordered, next expected: " << rxQp->ReceiverNextExpectedSeq);
+    //     }
+
+    //     uint32_t glb_flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+    //     if (rxQp->ReceiverNextExpectedSeq >= Settings::FlowId2Length[glb_flow_id] && x == 5) { //已经全部发完
+    //         //printf("Receive Last Packet, FlowId:%d, Length:%u, x=%d\n", rxQp->m_flow_id, Settings::FlowId2Length[glb_flow_id], x);
+    //         x = 1;
+    //     }
+    //     if (x == 2 || x == 4) {
+    //         printf("[%ld]超序，Flow:%u, 期待Seq：%u，当前Seq:%u\n", Simulator::Now().GetNanoSeconds(), glb_flow_id, rxQp->ReceiverNextExpectedSeq, ch.udp.seq);
+    //         fflush(stdout);
+    //         //exit(-1);
+    //     }
+    // }
+    // Log SR, x, and reorderable status
+
+    NS_LOG_INFO("ReceiveUdp: m_SR=" << m_SR 
+                 << ", x=" << x 
+                 << ", m_reorderable=" << rxQp->m_reorderable);
     rxQp->send_cnp = (ecnbits || cnp_check);
     if (x == 1 || x == 2 || x == 6) {  // generate ACK or NACK
         qbbHeader seqh;
@@ -456,6 +502,16 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch) {
             } else {
                 seqh.SetIrnNack(0);  // NACK without ackSyndrome (ACK) in loss recovery mode
                 seqh.SetIrnNackSize(0);
+            }
+        }
+        if (m_SR){
+            if (x == 2){
+                seqh.SetSrSeq(ch.udp.seq);
+                seqh.SetSrSize(payload_size);
+            }else{
+                //drop return zero sack
+                seqh.SetSrSeq(0); 
+                seqh.SetSrSize(0);
             }
         }
 
@@ -475,7 +531,11 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch) {
         Ipv4Header head;  // Prepare IPv4 header
         head.SetDestination(Ipv4Address(ch.sip));
         head.SetSource(Ipv4Address(ch.dip));
-        head.SetProtocol(x == 1 ? 0xFC : 0xFD);  // ack=0xFC nack=0xFD
+        if (m_SR){
+            head.SetProtocol(0xFC);
+        }else{
+            head.SetProtocol(x == 1 ? 0xFC : 0xFD);  // ack=0xFC nack=0xFD
+        }
         head.SetTtl(64);
         head.SetPayloadSize(newp->GetSize());
         head.SetIdentification(rxQp->m_ipid++);
@@ -494,10 +554,22 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch) {
             //printf("Generate Ack, Time:%ld, FlowId:%u, AckSeq:%u, Protocol:%X, UdpSeq:%u\n", 
             //    Simulator::Now().GetNanoSeconds(), flow_id, rxQp->ReceiverNextExpectedSeq, (x == 1 ? 0xFC : 0xFD), ch.udp.seq);
         //Generate Ack, Time:2050073073, FlowId:207433, AckSeq:195000, Protocol:FC, UdpSeq:1667000
-
         }
-
-
+        if (m_SR && m_srLog) {
+            qbbHeader checkHeader;
+            newp->PeekHeader(checkHeader);
+            if (x == 2) {
+                std::cout << "SR SACK packet created: SetSrSeq=" << ch.udp.seq
+                          << ", SetSrSize=" << payload_size
+                          << " (expected: seq=" << ch.udp.seq << ", size=" << payload_size << ")"
+                          << " for received packet seq=" << seq << std::endl;
+            } else {
+                std::cout << "SR ACK packet created: SetSrSeq=" << "0"
+                          << ", SetSrSize=" << "0"
+                          << " (expected: seq=0, size=0)"
+                          << " for received packet seq=" << seq << ", x=" << x << std::endl;
+            }
+        }
         // send
         uint32_t nic_idx = GetNicIdxOfRxQp(rxQp);
         m_nic[nic_idx].dev->RdmaEnqueueHighPrioQ(newp);
@@ -562,6 +634,136 @@ int RdmaHw::ReceiveCnp(Ptr<Packet> p, CustomHeader &ch) {
     return 0;
 }
 
+/******************************
+ * SR-specific functions/vars
+ *****************************/
+//return 0表示接收，return 1表示drop
+int RdmaHw::SR_ReceiveACK(Ptr<Packet> p, CustomHeader &ch) {
+    uint16_t qIndex = ch.ack.pg;
+    uint16_t port = ch.ack.dport;   // sport for this host
+    uint16_t sport = ch.ack.sport;  // dport for this host (sport of ACK packet)
+    uint32_t seq = ch.ack.seq;
+    uint8_t cnp = (ch.ack.flags >> qbbHeader::FLAG_CNP) & 1;
+
+    uint64_t key = GetQpKey(ch.sip, port, sport, qIndex);
+    Ptr<RdmaQueuePair> qp = GetQp(key);
+    if (qp == NULL) {
+        // lookup akashic memory
+        if (akashic_Qp.find(key) != akashic_Qp.end()) {
+            // printf("[GetQPACK] Akashic access: %u(%d) -> %u(%d)\n", this->m_node->GetId(), port,
+            // ch.sip, sport);
+            return 1;   // just drop
+        } else {
+            printf("ERROR: Node: %u %s - NIC cannot find the flow\n",
+                     m_node->GetId(), (ch.l3Prot == 0xFC ? "ACK" : "NACK"));
+            exit(1);    
+        }
+    }
+    // 记录接收前的状态
+    if (m_srLog) {
+        std::cout << "SR_ReceiveACK BEFORE: node=" << m_node->GetId() 
+              << " flow=" << qp->m_flow_id
+              << " ack_seq=" << seq
+              << " srNack=" << ch.ack.srNack 
+              << " srNackSize=" << ch.ack.srNackSize
+              << " snd_una=" << qp->snd_una 
+              << " snd_nxt=" << qp->snd_nxt
+              << " sack_blocks=" << qp->sr.m_sack.getSackBufferOverhead()
+              << " sack_bitmap=" << qp->sr.m_sack
+              << std::endl;
+    }
+
+    uint32_t nic_idx = GetNicIdxOfQp(qp);
+    Ptr<QbbNetDevice> dev = m_nic[nic_idx].dev;
+    uint32_t old_snd_una = qp->snd_una;
+    qp->Acknowledge(seq); //update snd_una
+    if (ch.ack.srNackSize != 0) {
+        qp->sr.m_sack.sack(ch.ack.srNack, ch.ack.srNackSize);
+    }
+    uint32_t sack_seq, sack_len;
+    if (qp->sr.m_sack.peekFrontBlock(&sack_seq, &sack_len)) {
+        if (m_srLog) {
+            std::cout << "SR_ReceiveACK SACK_FRONT: node=" << m_node->GetId()
+                      << " flow=" << qp->m_flow_id
+                      << " SACK front_block_seq=" << sack_seq
+                      << " SACK front_block_len=" << sack_len
+                      << " current_snd_una=" << qp->snd_una
+                      << std::endl;
+        }
+        if (qp->snd_una == sack_seq) {
+                qp->snd_una += sack_len;
+                if (m_srLog) {
+                    std::cout << "SR_ReceiveACK SACK_ADVANCE: node=" << m_node->GetId()
+                              << " flow=" << qp->m_flow_id
+                              << " advanced_snd_una_to=" << qp->snd_una << std::endl;
+                }
+            }
+    }
+    size_t discarded = qp->sr.m_sack.discardUpTo(qp->snd_una);
+    if (m_srLog && discarded > 0) {
+        std::cout << "SR_ReceiveACK SACK_DISCARD: node=" << m_node->GetId()
+              << " flow=" << qp->m_flow_id
+              << " discarded_blocks=" << discarded
+              << " up_to_seq=" << qp->snd_una << std::endl;
+    }
+    if (qp->snd_nxt < qp->snd_una) {
+        if (m_srLog) {
+            std::cout << "SR_ReceiveACK SND_NXT_ADJUST: node=" << m_node->GetId()
+                      << " flow=" << qp->m_flow_id
+                      << " old_snd_nxt=" << qp->snd_nxt
+                      << " new_snd_nxt=" << qp->snd_una << std::endl;
+        }
+        qp->snd_nxt = qp->snd_una;
+    }
+
+    if (m_srLog) {
+        std::cout << "SR_ReceiveACK AFTER: node=" << m_node->GetId()
+                  << " flow=" << qp->m_flow_id
+                  << " ack_seq=" << seq
+                  << " old_snd_una=" << old_snd_una
+                  << " new_snd_una=" << qp->snd_una
+                  << " snd_nxt=" << qp->snd_nxt
+                  << " sack_blocks=" << qp->sr.m_sack.getSackBufferOverhead()
+                  << " sack_bitmap=" << qp->sr.m_sack
+                  << " una_advancement=" << (qp->snd_una - old_snd_una)
+                  << std::endl;
+    }
+    if (qp->IsFinished()) {
+        QpComplete(qp);
+    }
+    if (!qp->IsFinished() && qp->GetOnTheFly() > 0) {
+        if (old_snd_una < qp->snd_una) {
+            if (qp->m_retransmit.IsRunning()) qp->m_retransmit.Cancel();
+            qp->m_retransmit = Simulator::Schedule(m_SR_timeout, &RdmaHw::SR_HandleTimeout, this, qp, m_SR_timeout);
+            if (m_srLog) {
+                std::cout << "SR_ReceiveACK restart RETRANSMIT_TIMER with new snd_una: node=" << m_node->GetId()
+                          << " flow=" << qp->m_flow_id
+                          << " scheduled for " << m_SR_timeout.GetMicroSeconds() << " us"
+                          << " old_snd_una=" << old_snd_una
+                          << " snd_una=" << qp->snd_una
+                          << " snd_nxt=" << qp->snd_nxt << std::endl;
+            }
+        }
+    }
+    // handle cnp
+    if (!qp->IsFinished() && cnp) {
+        if (m_cc_mode == 1) {  // mlx version
+            cnp_received_mlx(qp);
+        }
+    }
+    if (m_cc_mode == 3) {
+        HandleAckHp(qp, p, ch);
+    } else if (m_cc_mode == 7) {
+        HandleAckTimely(qp, p, ch);
+    } else if (m_cc_mode == 8) {
+        HandleAckDctcp(qp, p, ch);
+    }
+    // ACK may advance the on-the-fly window, allowing more packets to send
+    dev->TriggerTransmit();
+    return 0;
+}
+
+
 int RdmaHw::ReceiveAck(Ptr<Packet> p, CustomHeader &ch) {
     uint16_t qIndex = ch.ack.pg;
     uint16_t port = ch.ack.dport;   // sport for this host
@@ -591,7 +793,7 @@ int RdmaHw::ReceiveAck(Ptr<Packet> p, CustomHeader &ch) {
         std::cout << "ERROR: shouldn't receive ack\n";
     else {
         if (!m_backto0) {
-            qp->Acknowledge(seq);
+            qp->Acknowledge(seq); // update snd_una 
         } else {
             uint32_t goback_seq = seq / m_chunk * m_chunk;
             qp->Acknowledge(goback_seq);
@@ -712,9 +914,93 @@ int RdmaHw::Receive(Ptr<Packet> p, CustomHeader &ch) {
     } else if (ch.l3Prot == 0xFD) {  // NACK
         return ReceiveAck(p, ch);
     } else if (ch.l3Prot == 0xFC) {  // ACK
-        return ReceiveAck(p, ch);
+        if (m_SR)
+            return SR_ReceiveACK(p, ch);
+        else
+            return ReceiveAck(p, ch);
     }
     return 0;
+}
+/**
+ * @brief Check sequence number when UDP DATA is received
+ *
+ * @return int
+ * 1: Drop
+ * 2: regular SACK
+ */
+int RdmaHw::Receiver_SR_CheckSeq(uint32_t seq, Ptr<RdmaRxQueuePair> q, uint32_t size, bool &cnp) {
+    uint32_t expected = q->ReceiverNextExpectedSeq;
+    if (m_srLog) {
+        std::cout << "[SR RX] node:" << m_node->GetId()
+                  << " flow:" << q->m_flow_id
+                  << " seq:" << seq
+                  << " size:" << size
+                  << " expected:" << expected
+                  << " BEFORE:" << q->m_receiver_bitmap
+                  << std::endl;
+    }
+    //不更新m_milestone_rx，不确定有什么影响
+    if (seq == expected || (seq < expected && seq + size >= expected)) {
+        q->ReceiverNextExpectedSeq += size - (expected - seq);
+        uint32_t sack_seq, sack_len;
+        if (q->m_receiver_bitmap.peekFrontBlock(&sack_seq, &sack_len)) {
+            if (sack_seq <= q->ReceiverNextExpectedSeq){
+                q->ReceiverNextExpectedSeq += (sack_len - (q->ReceiverNextExpectedSeq - sack_seq));
+            }
+        }
+        size_t progress = q->m_receiver_bitmap.discardUpTo(q->ReceiverNextExpectedSeq);
+        if (m_srLog) {
+            std::cout << "InOrder [SR RX] node:" << m_node->GetId()
+                      << " flow:" << q->m_flow_id
+                      << " seq:" << seq
+                      << " size:" << size
+                      << " AFTER:" << q->m_receiver_bitmap
+                      << " nextExpected:" << q->ReceiverNextExpectedSeq
+                      << std::endl;
+        }
+        return 2;
+    }
+    else if (seq > expected){
+        if (seq >= expected + m_SR_window) {
+            if (m_srLog) {
+                std::cout << "OOO [SR RX] node:" << m_node->GetId()
+                          << " flow:" << q->m_flow_id
+                          << " seq:" << seq
+                          << " size:" << size
+                          << " DROP: exceed window (expected=" << expected << ", window=" << m_SR_window << ")"
+                          << " AFTER:" << q->m_receiver_bitmap
+                          << " nextExpected:" << q->ReceiverNextExpectedSeq
+                          << std::endl;
+            }
+            return 1; // drop
+        }
+        // Generate SACK
+        q->m_receiver_bitmap.sack(seq, size);  // set SACK
+        NS_ASSERT(q->m_receiver_bitmap.discardUpTo(expected) ==
+                      0);  // SACK blocks must be larger than expected
+        if (m_srLog) {
+            std::cout << "OOO [SR RX] node:" << m_node->GetId()
+                      << " flow:" << q->m_flow_id
+                      << " seq:" << seq
+                      << " size:" << size
+                      << " AFTER(SACK):" << q->m_receiver_bitmap
+                      << " nextExpected:" << q->ReceiverNextExpectedSeq
+                      << std::endl;
+        }
+        return 2;      // generate SACK
+    }
+    else{
+        if (m_srLog) {
+            std::cout << "[SR RX] node:" << m_node->GetId()
+                      << " flow:" << q->m_flow_id
+                      << " seq:" << seq
+                      << " size:" << size
+                      << " DUP/OLD AFTER:" << q->m_receiver_bitmap
+                      << " nextExpected:" << q->ReceiverNextExpectedSeq
+                      << std::endl;
+        }
+        return 2;
+    }
 }
 
 /**
@@ -843,6 +1129,20 @@ void RdmaHw::RecoverQueue(Ptr<RdmaQueuePair> qp) { qp->snd_nxt = qp->snd_una; }
 
 void RdmaHw::QpComplete(Ptr<RdmaQueuePair> qp) {
     NS_ASSERT(!m_qpCompleteCallback.IsNull());
+    if (m_srLog) {
+        std::cout << "[QpComplete] node=" << m_node->GetId()
+                  << " flow=" << qp->m_flow_id
+                  << " snd_una=" << qp->snd_una
+                  << " snd_nxt=" << qp->snd_nxt;
+        if (qp->sr.m_enabled) {
+            std::cout << " sack_blocks=" << qp->sr.m_sack.getSackBufferOverhead()
+                      << " sack_bitmap=" << qp->sr.m_sack;
+        }
+        std::cout << std::endl;
+    }
+    
+    LogQpStats(qp);
+
     if (m_cc_mode == 1) {
         Simulator::Cancel(qp->mlx.m_eventUpdateAlpha);
         Simulator::Cancel(qp->mlx.m_eventDecreaseRate);
@@ -883,16 +1183,111 @@ void RdmaHw::RedistributeQp() {
         m_nic[nic_idx].dev->ReassignedQp(qp);
     }
 }
+/******************************
+ * SR-specific functions/vars
+ *****************************/
+Ptr<Packet> RdmaHw::SR_GetNxtPacket(Ptr<RdmaQueuePair> qp){
+    uint32_t payload_size;
+    uint32_t seq;
+    
+    // 记录发包前的状态
+    uint32_t old_snd_nxt = qp->snd_nxt;
+
+    qp->snd_nxt = qp->sr.m_sack.advanceToBlockEnd(qp->snd_nxt);
+    payload_size = qp->GetBytesLeft();
+    if (m_mtu < payload_size) {  // possibly last packet
+        payload_size = m_mtu;
+    }
+    seq = (uint32_t)qp->snd_nxt;
+
+    // 更新 snd_nxt
+    qp->snd_nxt += payload_size;
+
+    qp->stat.txTotalPkts += 1;
+    qp->stat.txDataBytes += payload_size;
+    
+    // 添加 SR 发包日志
+    if (m_srLog) {
+        std::cout << "SR_GetNxtPacket: node=" << m_node->GetId()
+              << " flow=" << qp->m_flow_id
+              << " snd_una=" << qp->snd_una
+              << " old_snd_nxt=" << old_snd_nxt
+              << " new_snd_nxt=" << qp->snd_nxt
+              << " packet_seq=" << seq
+              << " packet_size=" << payload_size
+              << " bytes_left=" << qp->GetBytesLeft()
+              << " sack_blocks=" << qp->sr.m_sack.getSackBufferOverhead()
+              << " sack_bitmap=" << qp->sr.m_sack
+              << " txTotalPkts=" << qp->stat.txTotalPkts
+              << " txDataBytes=" << qp->stat.txDataBytes
+              << std::endl;
+    }
+    
+    Ptr<Packet> p = Create<Packet>(payload_size);
+    SeqTsHeader seqTs;
+    seqTs.SetSeq(seq);
+    seqTs.SetPG(qp->m_pg);
+    p->AddHeader(seqTs);
+    UdpHeader udpHeader;
+    udpHeader.SetDestinationPort(qp->dport);
+    udpHeader.SetSourcePort(qp->sport);
+    p->AddHeader(udpHeader);
+    Ipv4Header ipHeader;
+    ipHeader.SetSource(qp->sip);
+    ipHeader.SetDestination(qp->dip);
+    ipHeader.SetProtocol(0x11);
+    ipHeader.SetPayloadSize(p->GetSize());
+    ipHeader.SetTtl(64);
+    ipHeader.SetTos(0);
+    ipHeader.SetIdentification(qp->m_ipid);
+    p->AddHeader(ipHeader);
+    PppHeader ppp;
+    ppp.SetProtocol(0x0021);  // EtherToPpp(0x800), see point-to-point-net-device.cc
+    p->AddHeader(ppp);  
+    // attach Stat Tag
+    uint8_t packet_pos = UINT8_MAX;
+    {
+        FlowIDNUMTag fint;
+        if (!p->PeekPacketTag(fint)) {
+            fint.SetId(qp->m_flow_id);
+            fint.SetFlowSize(qp->m_size);
+            p->AddPacketTag(fint);
+        }
+        FlowStatTag fst;
+        uint64_t size = qp->m_size;
+        if (!p->PeekPacketTag(fst)) {
+            if (size < m_mtu && seq + payload_size >= qp->m_size) {
+                fst.SetType(FlowStatTag::FLOW_START_AND_END);
+            } else if (seq + payload_size >= qp->m_size) {
+                fst.SetType(FlowStatTag::FLOW_END);
+            } else if (seq == 0) {
+                fst.SetType(FlowStatTag::FLOW_START);
+            } else {
+                fst.SetType(FlowStatTag::FLOW_NOTEND);
+            }
+            packet_pos = fst.GetType();
+            fst.setInitiatedTime(Simulator::Now().GetSeconds());
+            p->AddPacketTag(fst);
+        }
+    }
+    qp->stat.txTotalBytes += p->GetSize(); 
+    qp->m_ipid++;
+    return p;
+}
 
 Ptr<Packet> RdmaHw::GetNxtPacket(Ptr<RdmaQueuePair> qp) {
+    if (m_SR){
+        return SR_GetNxtPacket(qp);
+    }
     uint32_t payload_size = qp->GetBytesLeft();
     if (m_mtu < payload_size) {  // possibly last packet
         payload_size = m_mtu;
     }
     uint32_t seq = (uint32_t)qp->snd_nxt;
     bool proceed_snd_nxt = true;
+
     qp->stat.txTotalPkts += 1;
-    qp->stat.txTotalBytes += payload_size;
+    qp->stat.txDataBytes += payload_size;
 
     Ptr<Packet> p = Create<Packet>(payload_size);
     // add SeqTsHeader
@@ -955,7 +1350,7 @@ Ptr<Packet> RdmaHw::GetNxtPacket(Ptr<RdmaQueuePair> qp) {
     if (proceed_snd_nxt) qp->snd_nxt += payload_size;
 
     qp->m_ipid++;
-
+    qp->stat.txTotalBytes += p->GetSize();
     // return
     return p;
 }
@@ -974,14 +1369,80 @@ void RdmaHw::PktSent(Ptr<RdmaQueuePair> qp, Ptr<Packet> pkt, Time interframeGap)
 #endif
         RdmaHw::nAllPkts += 1;
         if (ch.l3Prot == 0x11) {  // UDP
-            // Update Timer
-            if (qp->m_retransmit.IsRunning()) qp->m_retransmit.Cancel();
-            qp->m_retransmit = Simulator::Schedule(qp->GetRto(m_mtu), &RdmaHw::HandleTimeout, this,
-                                                   qp, qp->GetRto(m_mtu));
+            if(qp->sr.m_enabled){
+                if (!qp->m_retransmit.IsRunning()){
+                        if (m_srLog) {
+                            std::cout << "SR retransmit timer Initialed: IsRunning=" << qp->m_retransmit.IsRunning() << ", m_recovery=" << qp->sr.m_recovery << std::endl;
+                        }
+                    qp->m_retransmit = Simulator::Schedule(qp->GetRto(m_mtu), &RdmaHw::HandleTimeout, this,
+                                                    qp, qp->GetRto(m_mtu));
+                }
+                if (qp->sr.m_recovery){
+                    if (qp->m_retransmit.IsRunning()){
+                        if (m_srLog) {
+                            std::cout << "SR retransmit timer Restart for retransmit packets: IsRunning=" << qp->m_retransmit.IsRunning() << ", m_recovery=" << qp->sr.m_recovery << std::endl;
+                        }
+                        qp->m_retransmit.Cancel();
+                    }
+                    qp->m_retransmit = Simulator::Schedule(qp->GetRto(m_mtu), &RdmaHw::HandleTimeout, this, qp, qp->GetRto(m_mtu));
+                    qp->sr.m_recovery = false;
+                }
+            }else{
+                // Update Timer
+                if (qp->m_retransmit.IsRunning()) qp->m_retransmit.Cancel();
+                qp->m_retransmit = Simulator::Schedule(qp->GetRto(m_mtu), &RdmaHw::HandleTimeout, this,
+                                                    qp, qp->GetRto(m_mtu));
+            }
         } else if (ch.l3Prot == 0xFC || ch.l3Prot == 0xFD || ch.l3Prot == 0xFF) {  // ACK, NACK, CNP
         } else if (ch.l3Prot == 0xFE) {                                            // PFC
         }
     }
+}
+/******************************
+ * SR-specific functions/vars
+ *****************************/
+void RdmaHw::SR_HandleTimeout(Ptr<RdmaQueuePair> qp, Time rto) {
+    if (qp->IsFinished()) {
+        return;
+    }
+    uint32_t old_snd_una = qp->snd_una;
+    uint32_t old_snd_nxt = qp->snd_nxt;
+    auto old_sack = qp->sr.m_sack;
+
+    if (m_srLog) {
+        std::cout << "SR_HandleTimeout BEFORE: node=" << m_node->GetId()
+                  << " flow=" << qp->m_flow_id
+                  << " snd_una=" << old_snd_una
+                  << " snd_nxt=" << old_snd_nxt
+                  << " sack_blocks=" << old_sack.getSackBufferOverhead()
+                  << " sack_bitmap=" << old_sack
+                  << std::endl;
+    }
+
+    RecoverQueue(qp);
+
+    // 限制snd_una和snd_nxt
+    if (qp->snd_una > qp->m_size) qp->snd_una = qp->m_size;
+    if (qp->snd_nxt < qp->snd_una) qp->snd_nxt = qp->snd_una;
+    if (qp->snd_nxt > qp->m_size) qp->snd_nxt = qp->m_size;
+
+    // 限制sr的m_sack表
+    qp->sr.m_sack.discardUpTo(qp->snd_una);
+
+    if (m_srLog) {
+        std::cout << "SR_HandleTimeout AFTER: node=" << m_node->GetId()
+              << " flow=" << qp->m_flow_id
+              << " snd_una=" << qp->snd_una
+              << " snd_nxt=" << qp->snd_nxt
+              << " sack_blocks=" << qp->sr.m_sack.getSackBufferOverhead()
+              << " sack_bitmap=" << qp->sr.m_sack
+              << std::endl;
+    }
+
+    uint32_t nic_idx = GetNicIdxOfQp(qp);
+    Ptr<QbbNetDevice> dev = m_nic[nic_idx].dev;
+    qp->sr.m_recovery = true;
+    dev->TriggerTransmit();
 }
 
 void RdmaHw::HandleTimeout(Ptr<RdmaQueuePair> qp, Time rto) {
@@ -1433,6 +1894,50 @@ void RdmaHw::UpdateRateTimely(Ptr<RdmaQueuePair> qp, Ptr<Packet> p, CustomHeader
     }
 }
 void RdmaHw::FastReactTimely(Ptr<RdmaQueuePair> qp, Ptr<Packet> p, CustomHeader &ch) {}
+
+void RdmaHw::LogQpStats(Ptr<RdmaQueuePair> qp) {
+    if (!m_qpStatEnabled || m_qpStatFile == nullptr) {
+        return;
+    }
+
+    // 记录结束时间
+    qp->stat.endTime = Simulator::Now();
+
+    // 获取 flow ID
+    uint32_t flow_id = qp->m_flow_id;
+    if (flow_id < 0) {
+        // 如果没有设置 flow_id，尝试从 Settings 中获取
+        auto key = std::make_tuple(qp->sip, qp->dip, qp->sport, qp->dport);
+        auto it = Settings::QPPair_info2FlowId.find(key);
+        if (it != Settings::QPPair_info2FlowId.end()) {
+            flow_id = it->second;
+        } else {
+            flow_id = 0; // 默认值
+        }
+    }
+
+    // 获取源和目的节点 ID
+    uint32_t src_id = Settings::ip_to_node_id(qp->sip);
+    uint32_t dst_id = Settings::ip_to_node_id(qp->dip);
+
+    // 写入统计信息到文件
+    // 格式：flow_id src_id dst_id sport dport original_size actual_data_bytes actual_total_bytes packet_count start_time end_time duration
+    fprintf(m_qpStatFile, "%u %u %u %u %u %lu %lu %lu %lu %lu %lu %lu\n",
+            flow_id,                                    // flow ID
+            src_id,                                     // 源节点 ID  
+            dst_id,                                     // 目的节点 ID
+            qp->sport,                                  // 源端口
+            qp->dport,                                  // 目的端口
+            qp->m_size,                                 // 原始数据大小
+            qp->stat.txDataBytes,                       // 实际发送的数据字节数
+            qp->stat.txTotalBytes,                      // 实际发送的总字节数（包括头部）
+            qp->stat.txTotalPkts,                       // 实际发送的包数量
+            qp->stat.startTime.GetTimeStep(),           // 开始时间
+            qp->stat.endTime.GetTimeStep(),             // 结束时间
+            (qp->stat.endTime - qp->stat.startTime).GetTimeStep()  // 持续时间
+    );
+    fflush(m_qpStatFile);
+}  
 
 /**********************
  * DCTCP

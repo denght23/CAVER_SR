@@ -37,6 +37,7 @@ class RdmaHw : public Object {
     bool m_backto0;
     bool m_var_win, m_fast_react;
     bool m_rateBound;
+    
     std::vector<RdmaInterfaceMgr> m_nic;  // list of running nic controlled by this RdmaHw
     std::unordered_map<uint64_t, Ptr<RdmaQueuePair>> m_qpMap;      // mapping from uint64_t to qp
     std::unordered_map<uint64_t, Ptr<RdmaRxQueuePair>> m_rxQpMap;  // mapping from uint64_t to rx qp
@@ -81,6 +82,7 @@ class RdmaHw : public Object {
     int ReceiveUdp(Ptr<Packet> p, CustomHeader &ch);
     int ReceiveCnp(Ptr<Packet> p, CustomHeader &ch);
     int ReceiveAck(Ptr<Packet> p, CustomHeader &ch);  // handle both ACK and NACK
+    int SR_ReceiveACK(Ptr<Packet> p, CustomHeader &ch);
     int Receive(Ptr<Packet> p,
                 CustomHeader &
                     ch);  // callback function that the QbbNetDevice should use when receive
@@ -88,6 +90,7 @@ class RdmaHw : public Object {
 
     void CheckandSendQCN(Ptr<RdmaRxQueuePair> q);
     int ReceiverCheckSeq(uint32_t seq, Ptr<RdmaRxQueuePair> q, uint32_t size, bool &cnp);
+    int Receiver_SR_CheckSeq(uint32_t seq, Ptr<RdmaRxQueuePair> q, uint32_t size, bool &cnp);
     void AddHeader(Ptr<Packet> p, uint16_t protocolNumber);
     static uint16_t EtherToPpp(uint16_t protocol);
 
@@ -101,11 +104,13 @@ class RdmaHw : public Object {
     void RedistributeQp();
 
     Ptr<Packet> GetNxtPacket(Ptr<RdmaQueuePair> qp);  // get next packet to send, inc snd_nxt
+    Ptr<Packet> SR_GetNxtPacket(Ptr<RdmaQueuePair> qp);  // get next packet to send, inc snd_nxt
     void PktSent(Ptr<RdmaQueuePair> qp, Ptr<Packet> pkt, Time interframeGap);
     void UpdateNextAvail(Ptr<RdmaQueuePair> qp, Time interframeGap, uint32_t pkt_size);
     void ChangeRate(Ptr<RdmaQueuePair> qp, DataRate new_rate);
 
     void HandleTimeout(Ptr<RdmaQueuePair> qp, Time rto);
+    void SR_HandleTimeout(Ptr<RdmaQueuePair> qp, Time rto);
     void HandleWindowTimeout(Ptr<RdmaRxQueuePair> rxQp);
 
     /* statistics */
@@ -188,6 +193,22 @@ class RdmaHw : public Object {
     Time m_irn_rtoLow;
     Time m_irn_rtoHigh;
     uint32_t m_irn_bdp;
+    /******************************
+     * SR-specific functions/vars
+     *****************************/
+    bool m_SR;
+    uint32_t m_SR_window;
+    Time m_SR_timeout; // MicroSeconds(200)
+    bool m_srLog; // enable SR receiver logs
+
+    static FILE* m_qpStatFile;          // QP 统计文件指针
+    static bool m_qpStatEnabled;
+    static void SetQpStatFile(FILE* file) { 
+        m_qpStatFile = file; 
+        m_qpStatEnabled = (file != nullptr); 
+    }
+    void LogQpStats(Ptr<RdmaQueuePair> qp);  // 记录 QP 统计信息
+
 };
 
 } /* namespace ns3 */

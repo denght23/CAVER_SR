@@ -167,6 +167,7 @@ FILE *all_links_output = NULL;
 FILE *flow_distribution = NULL;
 FILE *packetId2FlowId = NULL;
 FILE *ideal_ce = NULL;
+FILE *qp_stat_output = NULL;
 
 std::string data_rate, link_delay, topology_file, flow_file;
 std::string flow_input_file = "flow.txt";
@@ -188,6 +189,10 @@ std::string global_CE_map_mon_file = "global_ce_map.txt";
 std::string all_links_mon_file = "all_links.txt";
 //TODO:my code to add a file to store the packet header
 std::string m_packetHeaderFile = "pakcet_header.txt";
+std::string qp_stat_output_file = "qp_stat.txt";
+
+std::string sr_host_file;
+std::unordered_map<uint32_t, int> SR_host_dict;
 
 // CC params
 double alpha_resume_interval = 55, rp_timer = 300, ewma_gain = 1 / 16;
@@ -220,6 +225,14 @@ uint32_t buffer_size = 0;  // 0 to set buffer size automatically
 double load = 10.0;
 int enable_irn = 0;
 int random_seed = 1;  // change this randomly if you want random expt
+
+/******************************
+ * SR-specific functions/vars
+ *****************************/
+int enable_SR = 0;
+uint32_t sr_timeout = 200;  // microseconds
+uint32_t sr_window = 64000;
+bool SRLog = false;
 
 uint64_t maxRtt, maxBdp;
 
@@ -298,6 +311,7 @@ std::map<uint32_t, std::map<uint32_t, std::vector<uint32_t>>> ConvertAndStore(co
     }
     return m_nextHop;
 }
+
 
 std::map<uint32_t, std::map<uint32_t, uint32_t>> CreateNodeInterfaceMap(const std::map<Ptr<Node>, std::map<Ptr<Node>, Interface>>& nbr2if){
     std::map<uint32_t, std::map<uint32_t, uint32_t>> nodeInterfaceMap;
@@ -1439,6 +1453,29 @@ int main(int argc, char *argv[]) {
                 conf >> v;
                 flow_input_file = v;
                 std::cerr << "FLOW_INPUT_FILE\t\t\t" << flow_input_file << "\n";
+            } else if (key.compare("QP_STAT_OUTPUT_FILE") == 0) {
+                conf >> qp_stat_output_file;
+                std::cerr << "FLOW_INPUT_FILE\t\t\t" << flow_input_file << "\n";
+            } else if (key.compare("SR_HOST_FILE") == 0) {
+                std::string v;
+                conf >> v;
+                sr_host_file = v;
+                std::cerr << "SR_HOST_FILE\t\t\t" << sr_host_file << "\n";
+            } else if (key.compare("ENABLE_SR") == 0) {
+                int v;
+                conf >> v;
+                enable_SR = v;
+                std::cerr << "ENABLE_SR\t\t\t" << enable_SR << "\n";
+            } else if (key.compare("SR_TIMEOUT") == 0) {
+                uint32_t v;
+                conf >> v;
+                sr_timeout = v;
+                std::cerr << "SR_TIMEOUT\t\t\t" << sr_timeout << "\n";
+            } else if (key.compare("SR_WINDOW") == 0) {
+                uint32_t v;
+                conf >> v;
+                sr_window = v;
+                std::cerr << "SR_WINDOW\t\t\t" << sr_window << "\n";
             } else if (key.compare("CNP_OUTPUT_FILE") == 0) {
                 std::string v;
                 conf >> v;
@@ -1864,6 +1901,40 @@ int main(int argc, char *argv[]) {
     }
 
     /******************* READING CONFIG FILE IS DONE ***********************/
+    for (uint32_t i = 0; i < Settings::host_num; i++) {
+        SR_host_dict[i] = 0;
+    }
+
+
+    // Read SR_HOST_FILE if specified and exists
+    if (!sr_host_file.empty()) {
+        std::ifstream sr_file(sr_host_file);
+        if (sr_file.good()){
+            if (sr_file.is_open()) {
+                std::string line;
+                if (std::getline(sr_file, line)) {
+                    std::istringstream iss(line);
+                    uint32_t host_id;
+                    while (iss >> host_id) {
+                        SR_host_dict[host_id] = 1;
+                    }
+                }
+                sr_file.close();
+            }
+            // Log SR_HOST_FILE and updated SR_host_dict
+            std::cout << "SR_HOST_FILE: " << sr_host_file << std::endl;
+            std::cout << "SR_host_dict updated: ";
+            for (const auto& kv : SR_host_dict) {
+                std::cout << kv.first << ":" << kv.second << " ";
+            }
+            std::cout << std::endl;
+        }
+    }
+
+    pause_time = 1000;
+    
+
+
 
     /**
      * Activate ns3 logging
@@ -2096,7 +2167,17 @@ int main(int argc, char *argv[]) {
                 // set pfc
                 uint64_t delay =
                     DynamicCast<QbbChannel>(dev->GetChannel())->GetDelay().GetTimeStep();
-                uint32_t headroom = rate * delay / 8 / 1000000000 * 2 + 2 * sw->m_mmu->MTU;
+                // uint32_t headroom = rate * delay / 8 / 1000000000 * 2 + 2 * sw->m_mmu->MTU;
+                uint32_t headroom = rate * delay / 8 / 1000000000 * 3;
+                if (sw->m_mmu->m_mmuLog) {
+                    std::cout << "MMU Log: Node " << i
+                              << ", Port " << j
+                              << ", Rate: " << rate
+                              << ", Delay: " << delay
+                              << ", MTU: " << sw->m_mmu->MTU
+                              << ", Headroom: " << headroom
+                              << std::endl;
+                }
                 sw->m_mmu->ConfigHdrm(j, headroom);
             }
             sw->m_mmu->ConfigNPort(sw->GetNDevices() - 1);
@@ -2112,6 +2193,14 @@ int main(int argc, char *argv[]) {
     flow_input_stream = fopen(flow_input_file.c_str(), "w");
     if (cc_mode == 1) {
         cnp_output = fopen(cnp_output_file.c_str(), "w");
+    }
+    qp_stat_output = fopen(qp_stat_output_file.c_str(), "w");
+    if (qp_stat_output) {
+        // 写入文件头部
+        fprintf(qp_stat_output, "# flow_id src_id dst_id sport dport original_size actual_data_bytes actual_total_bytes packet_count start_time end_time duration\n");
+        
+        // 设置到 RdmaHw
+        RdmaHw::SetQpStatFile(qp_stat_output);
     }
 
     /**
@@ -2221,6 +2310,17 @@ int main(int argc, char *argv[]) {
             if (cc_mode == 1) {
                 Simulator::Schedule(NanoSeconds(cnp_mon_start), &cnp_freq_monitoring, cnp_output,
                                     rdmaHw);
+            }
+            // Set SR mode based on SR_host_dict
+            bool host_sr_mode = (SR_host_dict.find(i) != SR_host_dict.end() && SR_host_dict[i] == 1);
+            rdmaHw->SetAttribute("SrEnable", BooleanValue(host_sr_mode && enable_SR));
+            rdmaHw->SetAttribute("SrTimeout", TimeValue(MicroSeconds(sr_timeout)));
+            rdmaHw->SetAttribute("SrWindow", UintegerValue(sr_window));
+            rdmaHw->SetAttribute("SRLog", BooleanValue(host_sr_mode && SRLog));
+            if (host_sr_mode && enable_SR && SRLog) {
+                std::cout << "Host " << i << " configured with SR mode enabled\n";
+            } else if(!host_sr_mode && enable_SR && SRLog) {
+                std::cout << "Host " << i << " configured with SR mode disabled\n";
             }
 
             // create and install RdmaDriver

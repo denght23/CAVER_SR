@@ -58,6 +58,8 @@ class SwitchNode : public Node {
                        const std::vector<int> &nexthops);     // choose egress port
     uint32_t DoLbGreedy(Ptr<const Packet> p, const CustomHeader &ch,
                                   const std::vector<int> &nexthops);  // choose egress port
+    uint32_t DoLbOblivious(Ptr<const Packet> p, const CustomHeader &ch,
+                                   const std::vector<int> &nexthops);  // choose egress port
     uint32_t m_drill_candidate;                               // always 2 (power of two)
     std::map<uint32_t, uint32_t> m_previousBestInterfaceMap;  // <dip, previousBestInterface>
     uint32_t CalculateInterfaceLoad(uint32_t interface);      // Get the load of a interface
@@ -131,6 +133,9 @@ class SwitchNode : public Node {
     
     std::unordered_set<uint64_t> easy_flowtable;
     uint64_t GetQpKey(uint32_t dip, uint16_t sport, uint16_t dport, uint16_t pg);
+
+
+    bool reorder_log = false;
 };
 
 } /* namespace ns3 */

@@ -3,10 +3,13 @@
 
 #include <ns3/node.h>
 #include <ns3/random-variable-stream.h>
+#include <ns3/simulator.h>
+#include <ns3/event-id.h>
 
 #include <list>
 #include <unordered_map>
 
+// 保留原有的路由模块引用
 #include "ns3/conga-routing.h"
 #include "ns3/conweave-routing.h"
 #include "ns3/letflow-routing.h"
@@ -14,9 +17,7 @@
 #include "ns3/dv-routing.h"
 #include "ns3/caver-routing.h"
 #include "ns3/hula-routing.h"
-#include "ns3/dv-routing.h"
 #include "ns3/noshare-routing.h"
-
 
 namespace ns3 {
 
@@ -24,15 +25,16 @@ class Packet;
 
 class SwitchMmu : public Object {
    public:
-    static const unsigned qCnt = 8;    // Number of queues/priorities used
-    static const unsigned pCnt = 128;  // port 0 is not used so + 1	// Number of ports used
-    static const unsigned MTU = 1048;  // 1000 + headers
+    // 使用 HPCC 版本的常量定义
+    static const uint32_t pCnt = 257;  // Number of ports used
+    static const uint32_t qCnt = 8;    // Number of queues/priorities used
+    static const uint32_t MTU = 1048;  // MTU size
 
     static TypeId GetTypeId(void);
 
     SwitchMmu(void);
-    void InitSwitch(void);
 
+    // ==================== HPCC 版本的核心接口 ====================
     bool CheckIngressAdmission(uint32_t port, uint32_t qIndex, uint32_t psize);
     bool CheckEgressAdmission(uint32_t port, uint32_t qIndex, uint32_t psize);
     void UpdateIngressAdmission(uint32_t port, uint32_t qIndex, uint32_t psize);
@@ -40,84 +42,86 @@ class SwitchMmu : public Object {
     void RemoveFromIngressAdmission(uint32_t port, uint32_t qIndex, uint32_t psize);
     void RemoveFromEgressAdmission(uint32_t port, uint32_t qIndex, uint32_t psize);
 
-    void SetPause(uint32_t port, uint32_t qIndex, uint32_t pause_time);
+    // ==================== HPCC 版本的 PFC 接口 ====================
+    bool CheckShouldPause(uint32_t port, uint32_t qIndex);
+    bool CheckShouldResume(uint32_t port, uint32_t qIndex);
+    void SetPause(uint32_t port, uint32_t qIndex);
     void SetResume(uint32_t port, uint32_t qIndex);
+
+    // ==================== PFC 死锁检测相关函数 ====================
+    void PfcDeadlockCheck(uint32_t port, uint32_t qIndex);
+    void StartPfcDeadlockTimer(uint32_t port, uint32_t qIndex);
+    void StopPfcDeadlockTimer(uint32_t port, uint32_t qIndex);
+
+    // ==================== 兼容性包装函数 ====================
+    // 为了兼容原有代码而添加的包装函数
     void GetPauseClasses(uint32_t port, uint32_t qIndex, bool pClasses[]);
     bool GetResumeClasses(uint32_t port, uint32_t qIndex);
- 
-    void SetBroadcomParams(uint32_t buffer_cell_limit_sp,  // ingress sp buffer threshold p.120
-                           uint32_t buffer_cell_limit_sp_shared,  // ingress sp buffer shared
-                                                                  // threshold, nonshare -> share
-                           uint32_t pg_min_cell,                  // ingress pg guarantee
-                           uint32_t port_min_cell,                // ingress port guarantee
-                           uint32_t pg_shared_limit_cell,         // max buffer for an ingress pg
-                           uint32_t port_max_shared_cell,         // max buffer for an ingress port
-                           uint32_t pg_hdrm_limit,                // ingress pg headroom
-                           uint32_t port_max_pkt_size,            // ingress global headroom
-                           uint32_t q_min_cell,                   // egress queue guaranteed buffer
-                           uint32_t op_uc_port_config1_cell,      // egress queue threshold
-                           uint32_t op_uc_port_config_cell,       // egress port threshold
-                           uint32_t op_buffer_shared_limit_cell,  // egress sp threshold
-                           uint32_t q_shared_alpha_cell, uint32_t port_share_alpha_cell,
+    void SetPause(uint32_t port, uint32_t qIndex, uint32_t pause_time);
+
+    // ==================== HPCC 版本的配置接口 ====================
+    void ConfigEcn(uint32_t port, uint32_t _kmin, uint32_t _kmax, double _pmax);
+    void ConfigHdrm(uint32_t port, uint32_t size);
+    void ConfigNPort(uint32_t n_port);
+    void ConfigBufferSize(uint32_t size);
+
+    // ==================== HPCC 版本的查询接口 ====================
+    uint32_t GetPfcThreshold(uint32_t port);
+    uint32_t GetSharedUsed(uint32_t port, uint32_t qIndex);
+    bool ShouldSendCN(uint32_t ifindex, uint32_t qIndex);
+
+    // ==================== 兼容性查询函数 ====================
+    uint32_t GetUsedBufferTotal();
+    void SetDynamicThreshold(bool value);
+    bool GetDynamicThreshold(void) const { return false; } // HPCC 不支持动态阈值
+
+    // 兼容性函数 - 映射到 HPCC 版本
+    uint32_t GetusedIngressPortBytes(uint32_t port);
+    uint32_t GetusedIngressSPBytes();
+    uint32_t Getport_max_shared_cell(void) const;
+    uint32_t GetusedEgressQSharedBytes(uint32_t port, uint32_t qIndex);
+    uint32_t Getop_uc_port_config1_cell(void) const;
+
+    // ==================== 原有代码需要的特殊函数 ====================
+    void SetBroadcomParams(uint32_t buffer_cell_limit_sp,
+                           uint32_t buffer_cell_limit_sp_shared,
+                           uint32_t pg_min_cell,
+                           uint32_t port_min_cell,
+                           uint32_t pg_shared_limit_cell,
+                           uint32_t port_max_shared_cell,
+                           uint32_t pg_hdrm_limit,
+                           uint32_t port_max_pkt_size,
+                           uint32_t q_min_cell,
+                           uint32_t op_uc_port_config1_cell,
+                           uint32_t op_uc_port_config_cell,
+                           uint32_t op_buffer_shared_limit_cell,
+                           uint32_t q_shared_alpha_cell, 
+                           uint32_t port_share_alpha_cell,
                            uint32_t pg_qcn_threshold);
 
     void SetMarkingThreshold(uint32_t kmin, uint32_t kmax, double pmax);
-
-    bool ShouldSendCN(uint32_t ifindex, uint32_t qIndex);
-
-    uint32_t GetUsedBufferTotal();
-
-    void SetDynamicThreshold(bool value);
-    bool GetDynamicThreshold(void) const { return m_dynamicth; }
-
-    // void printQueueStat(std::ostream& os, uint32_t port);
-
-    void ConfigEcn(uint32_t port, uint32_t _kmin, uint32_t _kmax, double _pmax);
-    void ConfigBufferSize(uint32_t size);
-
-    void ConfigHdrm(uint32_t port, uint32_t size);
-    void ConfigNPort(uint32_t n_port);
-
     uint32_t GetIngressSP(uint32_t port, uint32_t pgIndex);
     uint32_t GetEgressSP(uint32_t port, uint32_t qIndex);
+    void InitSwitch(void);
 
-    uint32_t GetusedIngressPortBytes(uint32_t port);
-    uint32_t GetusedIngressSPBytes();
-    uint32_t Getport_max_shared_cell(void) const { return m_port_max_shared_cell; }
-    uint32_t GetusedEgressQSharedBytes(uint32_t port, uint32_t qIndex);
-    uint32_t Getop_uc_port_config1_cell(void) const { return m_op_uc_port_config1_cell; }
-    
-
-    // config
+    // ==================== HPCC 版本的配置参数 ====================
     uint32_t node_id;
-
+    uint32_t buffer_size;
+    uint32_t pfc_a_shift[pCnt];
+    uint32_t reserve;
+    uint32_t headroom[pCnt];
+    uint32_t resume_offset;
     uint32_t kmin[pCnt], kmax[pCnt];
     double pmax[pCnt];
+    uint32_t total_hdrm;
+    uint32_t total_rsrv;
+
+    // ==================== HPCC 版本的运行时状态 ====================
+    uint32_t shared_used_bytes;
+    uint32_t hdrm_bytes[pCnt][qCnt];
+    uint32_t ingress_bytes[pCnt][qCnt];
     uint32_t paused[pCnt][qCnt];
-    EventId resumeEvt[pCnt][qCnt];
-    bool m_pause_remote[pCnt][qCnt];
-
-    uint32_t pfc_a_shift[pCnt];         // legacy: not used anymore
-    uint32_t egress_bytes[pCnt][qCnt];  // legacy: not used anymore
-
-    uint32_t GetActivePortCnt(void) const { return m_activePortCnt; }
-    void SetActivePortCnt(uint32_t v) {
-        m_activePortCnt = v;
-        InitSwitch();
-    }
-
-    uint32_t GetMmuBufferBytes(void) const { return m_maxBufferBytes; }
-    uint32_t GetMaxBufferBytesPerPort(void) const { return m_maxBufferBytesPerPort; }
-    void SetMaxBufferBytesPerPort(uint32_t v) {
-        m_maxBufferBytesPerPort = v;
-        InitSwitch();
-    }
-
-    uint32_t GetPgHdrmLimit(void) const { return m_pg_hdrm_limit[0]; }
-    void SetPgHdrmLimit(uint32_t v) {
-        for (int i = 0; i < pCnt; i++) m_pg_hdrm_limit[i] = v;
-        InitSwitch();
-    }
+    uint32_t egress_bytes[pCnt][qCnt];
 
     /*------------ Conga Objects-------------*/
     CongaRouting m_congaRouting;
@@ -130,65 +134,33 @@ class SwitchMmu : public Object {
 
     /*------------ DVObjects-------------*/
     DVRouting m_dvRouting;
-    
+
+    /*------------ CaverObjects-------------*/
     CaverRouting m_caverRouting;
+
+    /*------------ HulaObjects-------------*/
     HulaRouting m_hulaRouting;
+
+    /*------------ NoshareObjects-------------*/
     NoshareRouting m_noshareRouting;
 
+    // ==================== 兼容性变量 ====================
+    // 为兼容原有代码添加的变量，用于 pause_remote 状态
+    bool m_pause_remote[pCnt][qCnt];
+    EventId resumeEvt[pCnt][qCnt];
+
+    // ==================== PFC 死锁检测变量 ====================
+    EventId pfcDeadlockTimer[pCnt][qCnt];  // PFC 死锁检测定时器
+    uint64_t pfcPauseStartTime[pCnt][qCnt]; // PFC 暂停开始时间
+    uint32_t pfcDeadlockCheckCount[pCnt][qCnt]; // PFC 死锁检测次数
+    uint32_t m_switch_id; // 本交换机 ID，需要在初始化时设置
+
+    bool m_mmuLog = false;
+    bool m_drop_log = false;
+    uint32_t GetPeerSwitchId(uint32_t port);
+
    private:
-    bool m_PFCenabled;
-
-    uint32_t m_maxBufferBytes{0};           // 总缓冲区的容量
-    uint32_t m_usedTotalBytes{0};           // 当前已用缓冲区字节数
-
-    unsigned m_activePortCnt{0};
-    uint32_t m_maxBufferBytesPerPort{0};  // use this to calculate m_maxBufferBytes 每个端口的最大缓冲区大小
-    uint32_t m_staticMaxBufferBytes{0};   // use this to calculate m_maxBufferBytes 静态配置的总缓冲区大小
-
-    uint32_t m_usedIngressPGBytes[pCnt][qCnt]; //每个端口/优先级组（PG）的入端口已用缓冲区字节数。
-    uint32_t m_usedIngressPortBytes[pCnt];     //每个端口的入端口已用缓冲区字节数。
-    uint32_t m_usedIngressSPBytes[4];          //服务池（Service Pool）的入端口已用缓冲区字节数。
-    uint32_t m_usedIngressPGHeadroomBytes[pCnt][qCnt];
-
-    uint32_t m_usedEgressQMinBytes[pCnt][qCnt];
-    uint32_t m_usedEgressQSharedBytes[pCnt][qCnt];
-    uint32_t m_usedEgressPortBytes[pCnt];
-    uint32_t m_usedEgressSPBytes[4];
-
-    // ingress params
-    uint32_t m_buffer_cell_limit_sp;  // ingress sp buffer threshold p.120
-    uint32_t
-        m_buffer_cell_limit_sp_shared;  // ingress sp buffer shared threshold, nonshare -> share
-    uint32_t m_pg_min_cell;             // ingress pg guarantee
-    uint32_t m_port_min_cell;           // ingress port guarantee
-    uint32_t m_pg_shared_limit_cell;    // max buffer for an ingress pg
-    uint32_t m_port_max_shared_cell;    // max buffer for an ingress port
-    uint32_t m_pg_hdrm_limit[pCnt];     // ingress pg headroom
-    uint32_t m_port_max_pkt_size;       // ingress global headroom
-    // still needs reset limits..
-    uint32_t m_port_min_cell_off;  // PAUSE off threshold
-    uint32_t m_pg_shared_limit_cell_off;
-    uint32_t m_global_hdrm_limit;
-
-    // egress params
-    uint32_t m_q_min_cell;                   // egress queue guaranteed buffer
-    uint32_t m_op_uc_port_config1_cell;      // egress queue threshold
-    uint32_t m_op_uc_port_config_cell;       // egress port threshold
-    uint32_t m_op_buffer_shared_limit_cell;  // egress sp threshold
-
-    // dynamic threshold
-    double m_pg_shared_alpha_cell{0};
-    double m_pg_shared_alpha_cell_egress{0};
-    double m_pg_shared_alpha_cell_off_diff;
-    double m_port_shared_alpha_cell;
-    double m_port_shared_alpha_cell_off_diff;
-    bool m_dynamicth;
-
-    double m_log_start;
-    double m_log_end;
-    double m_log_step;
-
-    UniformRandomVariable m_uniform_random_var;
+    bool m_PFCenabled = true;
 };
 
 } /* namespace ns3 */

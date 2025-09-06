@@ -21,11 +21,14 @@ MAX_RAND_RANGE = 1000000000
 # config template
 config_template = """TOPOLOGY_FILE config/{topo}.txt
 FLOW_FILE config/{flow}.txt
+SR_HOST_FILE {sr_host_file}
 
 FLOW_INPUT_FILE mix/output/{id}/{id}_in.txt
 CNP_OUTPUT_FILE mix/output/{id}/{id}_out_cnp.txt
 FCT_OUTPUT_FILE mix/output/{id}/{id}_out_fct.txt
 PFC_OUTPUT_FILE mix/output/{id}/{id}_out_pfc.txt
+QP_STAT_OUTPUT_FILE mix/output/{id}/{id}_out_qp_stat.txt
+
 QLEN_MON_FILE mix/output/{id}/{id}_out_qlen.txt
 VOQ_MON_FILE mix/output/{id}/{id}_out_voq.txt
 VOQ_MON_DETAIL_FILE mix/output/{id}/{id}_out_voq_per_dst.txt
@@ -57,6 +60,9 @@ LB_MODE {lb_mode}
 PACKET_LB_MODE {packet_lb_mode}
 ENABLE_PFC {enabled_pfc}
 ENABLE_IRN {enabled_irn}
+ENABLE_SR {enable_sr}
+SR_TIMEOUT {sr_timeout}
+SR_WINDOW {sr_window}
 
 CONWEAVE_TX_EXPIRY_TIME {cwh_tx_expiry_time}
 CONWEAVE_REPLY_TIMEOUT_EXTRA {cwh_extra_reply_deadline}
@@ -145,6 +151,7 @@ packet_lb_modes = {
     "hula": 12,
     "noshare":21,
     "greedy": 32,
+    "oblivious": 33,
 }
 
 topo2bdp = {
@@ -189,7 +196,7 @@ def main():
     parser.add_argument('--lb', dest='lb', action='store',
                         default='fecmp', help="fecmp/caver (default: fecmp)")
     parser.add_argument('--packet_lb', dest='packet_lb', action='store',
-                        default='fecmp', help="fecmp/greedy/drill/caver (default: fecmp)")
+                        default='fecmp', help="fecmp/greedy/drill/caver/oblivious (default: fecmp)")
     parser.add_argument('--pfc', dest='pfc', action='store',
                         type=int, default=1, help="enable PFC (default: 1)")
     parser.add_argument('--irn', dest='irn', action='store',
@@ -237,6 +244,14 @@ def main():
                         type=int, default=100, help="Caver Tau (default: 100us)")
     parser.add_argument('--caver_useEWMA', dest='caver_useEWMA', action='store',
                         type=int, default=0, help="Use EWMA (default: 1 for True, 0 for False)")
+    parser.add_argument('--sr', dest='sr', action='store',
+                        type=int, default=0, help="enable SR (default: 0)")
+    parser.add_argument('--sr_timeout', dest='sr_timeout', action='store',
+                    type=int, default=200, help="SR timeout value in microseconds (default: 200)")
+    parser.add_argument('--sr_window', dest='sr_window', action='store',
+                    type=int, default=64000, help="SR window size (default: 64000)")
+    parser.add_argument('--sr_host_file', dest='sr_host_file', action='store',
+                    default='', help="specify custom SR host file (default: auto-generate)")
 
     args = parser.parse_args()
 
@@ -281,6 +296,10 @@ def main():
     caver_pathChoice_num = args.caver_pathChoice_num
     caver_tau = args.caver_tau
     caver_useEWMA = args.caver_useEWMA
+    enabled_sr = int(args.sr)
+    sr_timeout = args.sr_timeout
+    sr_window = args.sr_window
+    sr_host_file = args.sr_host_file
 
     # get over-subscription ratio from topoogy name
 
@@ -408,7 +427,7 @@ def main():
     # record to history
     simulday = datetime.now().strftime("%m/%d/%y")
     with open("./mix/.history", "a") as history:
-        history.write("{simulday},{config_ID},{cc_mode},{lb_mode},{packet_lb_mode},{cwh_tx_expiry_time},{cwh_extra_reply_deadline},{cwh_path_pause_time},{cwh_extra_voq_flush_time},{cwh_default_voq_waiting_time},{pfc},{irn},{has_win},{var_win},{topo},{bw},{cdf},{load},{time}\n".format(
+        history.write("{simulday},{config_ID},{cc_mode},{lb_mode},{packet_lb_mode},{cwh_tx_expiry_time},{cwh_extra_reply_deadline},{cwh_path_pause_time},{cwh_extra_voq_flush_time},{cwh_default_voq_waiting_time},{pfc},{irn},{has_win},{var_win},{topo},{bw},{cdf},{load},{time},{enable_sr},{sr_timeout},{sr_window}\n".format(
             simulday=simulday,
             config_ID=config_ID,
             cc_mode=cc_mode,
@@ -428,6 +447,9 @@ def main():
             cdf=cdf,
             load=netload,
             time=args.simul_time,
+            enable_sr=enabled_sr,
+            sr_timeout=sr_timeout,
+            sr_window=sr_window
         ))
 
     # 1 BDP calculation
@@ -464,7 +486,8 @@ def main():
                                         load=netload, buffer_size=buffer, lb_mode=lb_mode, packet_lb_mode=packet_lb_mode, cwh_tx_expiry_time=cwh_tx_expiry_time,
                                         cwh_extra_reply_deadline=cwh_extra_reply_deadline, cwh_default_voq_waiting_time=cwh_default_voq_waiting_time,
                                         cwh_path_pause_time=cwh_path_pause_time, cwh_extra_voq_flush_time=cwh_extra_voq_flush_time,
-                                        enabled_pfc=enabled_pfc, enabled_irn=enabled_irn,
+                                        enabled_pfc=enabled_pfc, enabled_irn=enabled_irn, enable_sr=enabled_sr,
+                                        sr_timeout=sr_timeout, sr_window=sr_window,sr_host_file=sr_host_file if sr_host_file != '' else ("config/" + flow + "_SR_host.txt"),
                                         cc_mode=cc_mode,
                                         ai=ai, hai=hai, dctcp_ai=dctcp_ai,
                                         has_win=has_win, var_win=var_win,

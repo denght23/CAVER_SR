@@ -42,11 +42,36 @@ fi
 #     packet_lb_mode = "$4"
 # fi
   
-
-
-python3 run.py --lb fecmp --packet_lb fecmp --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 66 --topo ${TOPOLOGY} 2>&1 > /dev/null &
+python3 run.py --lb fecmp --packet_lb greedy --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 48 --topo ${TOPOLOGY} --sr 1 2>&1 > /dev/null &
 sleep 10
-python3 run.py --lb caver --packet_lb fecmp --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 66 --topo ${TOPOLOGY} 2>&1 > /dev/null &
+python3 run.py --lb fecmp --packet_lb greedy --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 48 --topo ${TOPOLOGY} --sr 0 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb caver --packet_lb greedy --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 48 --topo ${TOPOLOGY} --sr 1 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb fecmp --packet_lb fecmp --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 48 --topo ${TOPOLOGY} --sr 1 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb caver --packet_lb caver --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 48 --topo ${TOPOLOGY} --sr 1 2>&1 > /dev/null &
+sleep 10
+
+
+# python3 run.py --lb fecmp --packet_lb oblivious --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 48 --topo ${TOPOLOGY} --sr 1 --sr_window 256000 2>&1 > /dev/null &
+# sleep 10
+# python3 run.py --lb fecmp --packet_lb oblivious --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 50 --topo ${TOPOLOGY} --sr 1 --sr_window 256000 --sr_timeout 500 2>&1 > /dev/null &
+# sleep 10
+# python3 run.py --lb fecmp --packet_lb caver --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 50 --topo ${TOPOLOGY} --sr 1 2>&1 > /dev/null &
+# sleep 10
+# python3 run.py --lb fecmp --packet_lb greedy --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 50 --topo ${TOPOLOGY} --sr 1 2>&1 > /dev/null &
+# sleep 10
+# python3 run.py --lb fecmp --packet_lb oblivious --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 50 --topo ${TOPOLOGY} --my_flow L_25.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_packet --sr_host_file config/L_25.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_packet_SR_host.txt --sr 1 2>&1 > /dev/null &
+# sleep 10
+
+# python3 run.py --lb fecmp --packet_lb oblivious --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_25.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_packet --sr_host_file config/L_25.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_packet_SR_host.txt --sr 1 2>&1 > /dev/null &
+
+# python3 run.py --lb fecmp --packet_lb greedy --pfc 1 --irn 0 --simul_time 0.03 --netload 48 --topo fat_k8_100G_OS2 --my_flow L_24.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_packet --sr_host_file config/L_24.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_packet_SR_host.txt --sr 1 2>&1 > /dev/null &
+
+# python3 run.py --lb fecmp --packet_lb fecmp --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 66 --topo ${TOPOLOGY} 2>&1 > /dev/null &
+# sleep 10
+# python3 run.py --lb caver --packet_lb fecmp --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 66 --topo ${TOPOLOGY} 2>&1 > /dev/null &
 # python3 run.py --lb fecmp --packet_lb greedy --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 70 --topo ${TOPOLOGY} 2>&1 > /dev/null &
 # sleep 10
 # python3 run.py --lb fecmp --packet_lb caver --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload 70 --topo ${TOPOLOGY} 2>&1 > /dev/null &

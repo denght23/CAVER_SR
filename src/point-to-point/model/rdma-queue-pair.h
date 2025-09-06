@@ -37,7 +37,7 @@ class IrnSackManager {
     std::list<std::pair<uint32_t, uint32_t>> m_data;
 
    public:
-    int socketId{-1};
+    int socketId{-1}; // socketId = flow_id
 
     IrnSackManager();
     IrnSackManager(int flow_id);
@@ -47,6 +47,11 @@ class IrnSackManager {
     bool blockExists(uint32_t seq, uint32_t size);  // query if block exists inside SACK table
     bool peekFrontBlock(uint32_t *pseq, uint32_t *psize);
     size_t getSackBufferOverhead();  // get buffer overhead
+
+    /******************************
+     * SR-specific functions/vars
+     *****************************/
+    uint64_t advanceToBlockEnd(uint64_t snd_nxt);
 
     friend std::ostream &operator<<(std::ostream &os, const IrnSackManager &im);
 };
@@ -126,10 +131,22 @@ class RdmaQueuePair : public Object {
         bool m_recovery;
         uint32_t m_recovery_seq;
     } irn;
+    /******************************
+     * SR-specific functions/vars
+     *****************************/
+    struct {
+        bool m_enabled;
+        IrnSackManager m_sack;
+        bool m_recovery;
+    } sr;
+
 
     struct {
         uint64_t txTotalPkts{0};
         uint64_t txTotalBytes{0};
+        uint64_t txDataBytes{0};        // 新增：实际数据字节数（不包括头部）
+        Time startTime;                 // 新增：QP开始时间
+        Time endTime;                   // 新增：QP结束时间
     } stat;
 
     // Implement Timeout according to IB Spec Vol. 1 C9-139.
@@ -206,6 +223,10 @@ class RdmaRxQueuePair : public Object {  // Rx side queue pair
     uint32_t m_lastNACK;
     EventId QcnTimerEvent;  // if destroy this rxQp, remember to cancel this timer
     IrnSackManager m_irn_sack_;
+    /******************************
+     * SR-specific functions/vars
+     *****************************/
+    IrnSackManager m_receiver_bitmap;
     int32_t m_flow_id;
 
     bool send_cnp;

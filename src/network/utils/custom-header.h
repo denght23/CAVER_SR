@@ -126,6 +126,8 @@ public:
 		  IntHeader ih;
 		  uint32_t irnNack;
 		  uint16_t irnNackSize;
+      uint32_t srNack;
+      uint16_t srNackSize;
 	  } ack;
 	  // PauseHeader
 	  struct {
