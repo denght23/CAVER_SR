@@ -106,6 +106,15 @@ struct Interface {
 
     Interface() : idx(0), up(false) {} //initial 
 };
+// 在现有的结构体定义部分添加（与其他Flowlet结构体放在一起）
+struct PerHopCaverInfo {
+    uint32_t remoteCE;
+    Time updateTime;
+    bool valid;
+    
+    PerHopCaverInfo() : remoteCE(0), updateTime(Time(0)), valid(false) {}
+    PerHopCaverInfo(uint32_t ce, Time time, bool v) : remoteCE(ce), updateTime(time), valid(v) {}
+};
 
 /**
  * @brief Tag for monitoring last data sending time per flow

@@ -105,6 +105,11 @@ uint32_t caver_pathChoice_num = 4;
 
 Time caver_tau = MicroSeconds(100);
 bool caver_useEWMA = true;
+bool caver_per_host_routing = true;        // 新增
+uint32_t caver_per_host_routing_scheme = 1; // 新增
+uint32_t caver_metric_choice = 1; 
+uint32_t caver_data_backup_route = 1;       // 新增
+uint32_t caver_ack_route = 2;  
 bool init_log = false;
 bool global_ce_log = false;
 uint32_t global_ce_mon_interval = 20; //us
@@ -168,6 +173,8 @@ FILE *flow_distribution = NULL;
 FILE *packetId2FlowId = NULL;
 FILE *ideal_ce = NULL;
 FILE *qp_stat_output = NULL;
+FILE *pfc_record_output = NULL;
+FILE *rate_change_output = NULL;
 
 std::string data_rate, link_delay, topology_file, flow_file;
 std::string flow_input_file = "flow.txt";
@@ -190,6 +197,8 @@ std::string all_links_mon_file = "all_links.txt";
 //TODO:my code to add a file to store the packet header
 std::string m_packetHeaderFile = "pakcet_header.txt";
 std::string qp_stat_output_file = "qp_stat.txt";
+std::string pfc_record_output_file = "pfc_record.txt";
+std::string rate_change_output_file = "rate_change.txt";
 
 std::string sr_host_file;
 std::unordered_map<uint32_t, int> SR_host_dict;
@@ -231,8 +240,10 @@ int random_seed = 1;  // change this randomly if you want random expt
  *****************************/
 int enable_SR = 0;
 uint32_t sr_timeout = 200;  // microseconds
+uint32_t sr_nack_timeout = 100;  // 新增：NACK 超时时间
 uint32_t sr_window = 64000;
 bool SRLog = false;
+bool cc_enabled = true;
 
 uint64_t maxRtt, maxBdp;
 
@@ -1302,6 +1313,47 @@ void SetACCPathCETables_noshare(){
         }
     }
 }
+void SetPerHopCaverTables(){
+    if (init_log) {
+        printf("SetPerHopCaverTables begin\n");
+    }
+    Time now = Simulator::Now();
+    for (auto i = nextHop.begin(); i != nextHop.end(); i++){
+        Ptr<Node> node = i->first;
+        auto &table = i->second;
+        if (node->GetNodeType() == 1){  // 如果是交换机
+            Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(node);
+            
+            // 为每个目标主机设置per-hop caver表项
+            for (auto j = table.begin(); j != table.end(); j++){
+                Ptr<Node> dst = j->first;
+                if (dst->GetNodeType() == 0) {  // 如果目标是主机
+                    uint32_t host_id = Settings::hostIp2IdMap[serverAddress[dst->GetId()].Get()];
+                    
+                    // 获取到达该主机的所有端口
+                    std::vector<uint32_t> ports;
+                    vector<Ptr<Node>> nexts = j->second;
+                    for (int k = 0; k < (int)nexts.size(); k++) {
+                        Ptr<Node> nextHop_node = nexts[k];
+                        auto it = nbr2if[node].find(nextHop_node);
+                        if (it != nbr2if[node].end() && it->second.up) {
+                            ports.push_back(it->second.idx);
+                        }
+                    }
+                    
+                    // 初始化per-hop caver表项
+                    if (!ports.empty()) {
+                        sw->AddPerHopCaverTableEntry(host_id, ports);
+                    }
+                }
+            }
+        }
+    }
+    if (init_log) {
+        printf("SetPerHopCaverTables finished\n");
+    }
+}
+
 void SetPathChoiceTables(){
     Time now = Simulator::Now();
     for (auto i = nextHop.begin(); i != nextHop.end(); i++){
@@ -1314,8 +1366,12 @@ void SetPathChoiceTables(){
             Ipv4Address dstAddr = dst->GetObject<Ipv4>()->GetAddress(1, 0).GetLocal();
             if (node->GetNodeType() == 1){
                 Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(node);
-                if(sw->m_isToR == true){
+                if (sw->m_mmu->m_caverRouting.per_host_routing){
                     sw->AddPathChoiceTableEntry(dstAddr, now);
+                }else{
+                    if(sw->m_isToR == true){
+                        sw->AddPathChoiceTableEntry(dstAddr, now);
+                    }
                 }
             }
         }
@@ -1453,9 +1509,39 @@ int main(int argc, char *argv[]) {
                 conf >> v;
                 flow_input_file = v;
                 std::cerr << "FLOW_INPUT_FILE\t\t\t" << flow_input_file << "\n";
+            } else if (key.compare("CC_ENABLED") == 0) {
+                uint32_t v;
+                conf >> v;
+                cc_enabled = (v != 0);
+                std::cerr << "CC_ENABLED\t\t\t" << cc_enabled << "\n";
+            } else if (key.compare("CAVER_PER_HOST_ROUTING") == 0) {
+                uint32_t v;
+                conf >> v;
+                caver_per_host_routing = (v != 0);
+                std::cerr << "CAVER_PER_HOST_ROUTING\t\t" << caver_per_host_routing << "\n";
+            } else if (key.compare("CAVER_PER_HOST_ROUTING_SCHEME") == 0) {
+                uint32_t v;
+                conf >> v;
+                caver_per_host_routing_scheme = v;
+                std::cerr << "CAVER_PER_HOST_ROUTING_SCHEME\t" << caver_per_host_routing_scheme << "\n";
+            } else if (key.compare("CAVER_DATA_BACKUP_ROUTE") == 0) {
+                uint32_t v;
+                conf >> v;
+                caver_data_backup_route = v;
+                std::cerr << "CAVER_DATA_BACKUP_ROUTE\t\t" << caver_data_backup_route << "\n";
+            } else if (key.compare("CAVER_ACK_ROUTE") == 0) {
+                uint32_t v;
+                conf >> v;
+                caver_ack_route = v;
+                std::cerr << "CAVER_ACK_ROUTE\t\t\t" << caver_ack_route << "\n";
             } else if (key.compare("QP_STAT_OUTPUT_FILE") == 0) {
                 conf >> qp_stat_output_file;
-                std::cerr << "FLOW_INPUT_FILE\t\t\t" << flow_input_file << "\n";
+                std::cerr << "QP_STAT_OUTPUT_FILE\t\t" << qp_stat_output_file << "\n";
+            } else if (key.compare("CAVER_METRIC_CHOICE") == 0) {
+                uint32_t v;
+                conf >> v;
+                caver_metric_choice = v;
+                std::cerr << "CAVER_METRIC_CHOICE\t\t" << caver_metric_choice << "\n";
             } else if (key.compare("SR_HOST_FILE") == 0) {
                 std::string v;
                 conf >> v;
@@ -1471,6 +1557,13 @@ int main(int argc, char *argv[]) {
                 conf >> v;
                 sr_timeout = v;
                 std::cerr << "SR_TIMEOUT\t\t\t" << sr_timeout << "\n";
+            } else if (key.compare("PFC_RECORD_OUTPUT_FILE") == 0) {
+                conf >> pfc_record_output_file;
+            } else if (key.compare("RATE_CHANGE_OUTPUT_FILE") == 0) {
+                conf >> rate_change_output_file;
+            } else if (key.compare("SR_NACK_TIMEOUT") == 0) {
+                conf >> sr_nack_timeout;
+                std::cerr << "SR_NACK_TIMEOUT\t\t\t" << sr_nack_timeout << "\n";
             } else if (key.compare("SR_WINDOW") == 0) {
                 uint32_t v;
                 conf >> v;
@@ -1932,6 +2025,28 @@ int main(int argc, char *argv[]) {
     }
 
     pause_time = 1000;
+
+    pfc_record_output = fopen(pfc_record_output_file.c_str(), "w");
+    if (pfc_record_output) {
+        // 写入文件头部
+        fprintf(pfc_record_output, "# timestamp sender_node receiver_node qIndex type reason\n");
+        fprintf(pfc_record_output, "# type: 1=PAUSE, 0=RESUME\n");
+        fprintf(pfc_record_output, "# reason: pause_threshold_exceeded, resume_threshold_reached\n");
+        
+        // 设置到 SwitchNode
+        SwitchNode::SetPfcRecordFile(pfc_record_output);
+    }
+    rate_change_output = fopen(rate_change_output_file.c_str(), "w");
+    if (rate_change_output) {
+        // 写入文件头部
+        fprintf(rate_change_output, "# timestamp flow_id rate_bps target_rate_bps timestamp reason\n");
+        fprintf(rate_change_output, "# reason: initial_rate, first_cnp, cnp_decrease, fast_recovery, active_increase, hyper_increase, rate_control, hpcc_update, hpcc_fast_react, timely_increase, timely_decrease, dctcp_increase, dctcp_decrease\n");
+        
+        // 设置到 RdmaHw
+        RdmaHw::SetRateChangeFile(rate_change_output);
+    }
+    std::cout << "init record file" << std::endl;
+    fflush(stdout);
     
 
 
@@ -2316,7 +2431,9 @@ int main(int argc, char *argv[]) {
             rdmaHw->SetAttribute("SrEnable", BooleanValue(host_sr_mode && enable_SR));
             rdmaHw->SetAttribute("SrTimeout", TimeValue(MicroSeconds(sr_timeout)));
             rdmaHw->SetAttribute("SrWindow", UintegerValue(sr_window));
+            rdmaHw->SetAttribute("SrNackTimeout", TimeValue(MicroSeconds(sr_nack_timeout)));  // 新增
             rdmaHw->SetAttribute("SRLog", BooleanValue(host_sr_mode && SRLog));
+            rdmaHw->SetAttribute("CcEnabled", BooleanValue(cc_enabled));  // 新增：设置拥塞控制开关
             if (host_sr_mode && enable_SR && SRLog) {
                 std::cout << "Host " << i << " configured with SR mode enabled\n";
             } else if(!host_sr_mode && enable_SR && SRLog) {
@@ -2382,6 +2499,13 @@ int main(int argc, char *argv[]) {
     }
     
     if (lb_mode == 20 || packet_lb_mode == 20){
+        SetPathChoiceTables();
+        SetBestPathCETables();
+        SetACCPathCETables();
+        SetPerHopCaverTables();
+        std::cout << "SetPathChoiceTables, SetBestPathCETables, SetACCPathCETables, SetPerHopCaverTables" << std::endl;
+        fflush(stdout);
+
         //更新每个交换机的接口与邻居id的关系
         for (const auto& outerPair : nbr2if) {
             ns3::Ptr<ns3::Node> SrcNode = outerPair.first;
@@ -2469,6 +2593,7 @@ int main(int argc, char *argv[]) {
         SetPathChoiceTables();
         SetBestPathCETables();
         SetACCPathCETables();
+        SetPerHopCaverTables();  // 新增调用
         if (init_log){
             printf("This is init table logging\n");
             for (auto i = nextHop.begin(); i != nextHop.end(); i++){
@@ -2830,7 +2955,9 @@ int main(int argc, char *argv[]) {
                 NS_LOG_INFO("Switch Info - ID:%u, ToR:%d\n" % (sw->GetId(), sw->m_isToR));
                 sw->m_mmu->m_caverRouting.SetConstants(caver_dreTime, caver_agingTime,
                                                            caver_flowletTimeout, caver_quantizeBit,
-                                                           caver_alpha, caver_ce_threshold, caver_patchoiceTimeout, caver_pathChoice_num, caver_tau, caver_useEWMA);
+                                                           caver_alpha, caver_ce_threshold, caver_patchoiceTimeout,
+                                                            caver_pathChoice_num, caver_tau, caver_useEWMA, caver_per_host_routing, 
+                                                            caver_per_host_routing_scheme, caver_metric_choice, caver_data_backup_route, caver_ack_route);
                 sw->m_mmu->m_caverRouting.SetSwitchInfo(sw->m_isToR, sw->GetId());
                 // dive into related
             }

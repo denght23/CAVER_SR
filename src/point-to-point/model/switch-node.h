@@ -67,7 +67,8 @@ class SwitchNode : public Node {
     uint32_t DoLbConga(Ptr<Packet> p, CustomHeader &ch, const std::vector<int> &nexthops);
     // Conga (lb_mode = 6)
     uint32_t DoLbDV(Ptr<Packet> p, CustomHeader &ch, const std::vector<int> &nexthops);
-    uint32_t DoLbCaver(Ptr<Packet> p, CustomHeader &ch, const std::vector<int> &nexthops);
+    uint32_t DoLbCaverFlow(Ptr<Packet> p, CustomHeader &ch, const std::vector<int> &nexthops);
+    uint32_t DoLbCaverPacket(Ptr<Packet> p, CustomHeader &ch, const std::vector<int> &nexthops);
     uint32_t DoLbLetflow(Ptr<Packet> p, CustomHeader &ch, const std::vector<int> &nexthops);
     // ConWeave (lb_mode = 9)
     uint32_t DoLbConWeave(Ptr<const Packet> p, const CustomHeader &ch,
@@ -114,6 +115,8 @@ class SwitchNode : public Node {
     void AddACCPathCETableEntry_noshare(Ipv4Address &dstAddr, Time now);
     void AddBestPathCETableEntry(Ipv4Address &dstAddr, Time now);
     void AddACCPathCETableEntry(Ipv4Address &dstAddr, Time now);
+    
+    void AddPerHopCaverTableEntry(uint32_t host_id, const std::vector<uint32_t>& ports);
     // *******************************Add end**********************//
     void ClearTable();
     bool SwitchReceiveFromDevice(Ptr<NetDevice> device, Ptr<Packet> packet, CustomHeader &ch);
@@ -136,6 +139,15 @@ class SwitchNode : public Node {
 
 
     bool reorder_log = false;
+    bool m_pfcRecordEnabled = true; 
+
+    static FILE* m_pfcRecordFile;          // PFC 记录文件指针
+    static void SetPfcRecordFile(FILE* file) { 
+        m_pfcRecordFile = file; 
+    }
+    void LogPfcEvent(uint32_t receiverNodeId, uint32_t qIndex, uint32_t type, const std::string& reason);  // 记录 PFC 事件
+    uint32_t GetPortTotalQueueLength(uint32_t port);
+
 };
 
 } /* namespace ns3 */

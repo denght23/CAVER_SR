@@ -28,6 +28,8 @@ CNP_OUTPUT_FILE mix/output/{id}/{id}_out_cnp.txt
 FCT_OUTPUT_FILE mix/output/{id}/{id}_out_fct.txt
 PFC_OUTPUT_FILE mix/output/{id}/{id}_out_pfc.txt
 QP_STAT_OUTPUT_FILE mix/output/{id}/{id}_out_qp_stat.txt
+PFC_RECORD_OUTPUT_FILE mix/output/{id}/{id}_out_pfc_record.txt
+RATE_CHANGE_OUTPUT_FILE mix/output/{id}/{id}_out_rate_change.txt
 
 QLEN_MON_FILE mix/output/{id}/{id}_out_qlen.txt
 VOQ_MON_FILE mix/output/{id}/{id}_out_voq.txt
@@ -63,6 +65,7 @@ ENABLE_IRN {enabled_irn}
 ENABLE_SR {enable_sr}
 SR_TIMEOUT {sr_timeout}
 SR_WINDOW {sr_window}
+CC_ENABLED {cc_enabled}
 
 CONWEAVE_TX_EXPIRY_TIME {cwh_tx_expiry_time}
 CONWEAVE_REPLY_TIMEOUT_EXTRA {cwh_extra_reply_deadline}
@@ -77,6 +80,11 @@ CAVER_PATCHOICETIMEOUT {caver_patchoiceTimeout}
 CAVER_PATHCHOICE_NUM {caver_pathChoice_num}
 CAVER_TAU {caver_tau}
 CAVER_USE_EWMA {caver_useEWMA}
+CAVER_PER_HOST_ROUTING {per_host_routing}
+CAVER_PER_HOST_ROUTING_SCHEME {per_host_routing_scheme}
+CAVER_METRIC_CHOICE {metric_choice}
+CAVER_DATA_BACKUP_ROUTE {data_backup_route}
+CAVER_ACK_ROUTE {ack_route}
 
 ALPHA_RESUME_INTERVAL 1
 RATE_DECREASE_INTERVAL 4
@@ -247,11 +255,25 @@ def main():
     parser.add_argument('--sr', dest='sr', action='store',
                         type=int, default=0, help="enable SR (default: 0)")
     parser.add_argument('--sr_timeout', dest='sr_timeout', action='store',
-                    type=int, default=200, help="SR timeout value in microseconds (default: 200)")
+                    type=int, default=400, help="SR timeout value in microseconds (default: 400)")
+    parser.add_argument('--sr_nack_timeout', dest='sr_nack_timeout', action='store',
+                    type=int, default=150, help="SR NACK timeout value in microseconds (default: 150)")  # 新增
     parser.add_argument('--sr_window', dest='sr_window', action='store',
                     type=int, default=64000, help="SR window size (default: 64000)")
     parser.add_argument('--sr_host_file', dest='sr_host_file', action='store',
                     default='', help="specify custom SR host file (default: auto-generate)")
+    parser.add_argument('--cc_enabled', dest='cc_enabled', action='store',
+                    type=int, default=1, help="enable congestion control (default: 1)")  # 新增参数
+    parser.add_argument('--per_host_routing', dest='per_host_routing', action='store',
+                    type=int, default=1, help="enable per-host routing (default: 1)")
+    parser.add_argument('--per_host_routing_scheme', dest='per_host_routing_scheme', action='store',
+                    type=int, default=1, help="per-host routing scheme: 0=like caver, 1=per-host dynamic (default: 1)")
+    parser.add_argument('--metric_choice', dest='metric_choice', action='store',
+                type=int, default=1, help="metric choice: 0=ce, 1=queue (default: 1)")
+    parser.add_argument('--data_backup_route', dest='data_backup_route', action='store',
+            type=int, default=1, help="data backup route choice: 0: ECMP, 1: greedy, 2: oblivious")
+    parser.add_argument('--ack_route', dest='ack_route', action='store',
+            type=int, default=2, help="ack route choice: 0: ECMP, 1: greedy, 2: oblivious (default: 2)")
 
     args = parser.parse_args()
 
@@ -298,8 +320,15 @@ def main():
     caver_useEWMA = args.caver_useEWMA
     enabled_sr = int(args.sr)
     sr_timeout = args.sr_timeout
+    sr_nack_timeout = args.sr_nack_timeout
     sr_window = args.sr_window
     sr_host_file = args.sr_host_file
+    cc_enabled = int(args.cc_enabled) 
+    per_host_routing = int(args.per_host_routing)
+    per_host_routing_scheme = int(args.per_host_routing_scheme)
+    metric_choice = int(args.metric_choice)
+    data_backup_route = int(args.data_backup_route)
+    ack_route = int(args.ack_route)
 
     # get over-subscription ratio from topoogy name
 
@@ -430,6 +459,7 @@ def main():
         history.write("{simulday},{config_ID},{cc_mode},{lb_mode},{packet_lb_mode},{cwh_tx_expiry_time},{cwh_extra_reply_deadline},{cwh_path_pause_time},{cwh_extra_voq_flush_time},{cwh_default_voq_waiting_time},{pfc},{irn},{has_win},{var_win},{topo},{bw},{cdf},{load},{time},{enable_sr},{sr_timeout},{sr_window}\n".format(
             simulday=simulday,
             config_ID=config_ID,
+            cc_enabled=cc_enabled,
             cc_mode=cc_mode,
             lb_mode=lb_mode,
             packet_lb_mode=packet_lb_mode,
@@ -449,6 +479,7 @@ def main():
             time=args.simul_time,
             enable_sr=enabled_sr,
             sr_timeout=sr_timeout,
+            sr_nack_timeout=sr_nack_timeout,
             sr_window=sr_window
         ))
 
@@ -488,7 +519,9 @@ def main():
                                         cwh_path_pause_time=cwh_path_pause_time, cwh_extra_voq_flush_time=cwh_extra_voq_flush_time,
                                         enabled_pfc=enabled_pfc, enabled_irn=enabled_irn, enable_sr=enabled_sr,
                                         sr_timeout=sr_timeout, sr_window=sr_window,sr_host_file=sr_host_file if sr_host_file != '' else ("config/" + flow + "_SR_host.txt"),
-                                        cc_mode=cc_mode,
+                                        cc_mode=cc_mode,cc_enabled = cc_enabled, metric_choice=metric_choice, 
+                                        data_backup_route=data_backup_route, ack_route=ack_route, 
+                                        per_host_routing=per_host_routing, per_host_routing_scheme=per_host_routing_scheme,  # 新增参数
                                         ai=ai, hai=hai, dctcp_ai=dctcp_ai,
                                         has_win=has_win, var_win=var_win,
                                         fast_react=fast_react, mi=mi, int_multi=int_multi, ewma_gain=ewma_gain,

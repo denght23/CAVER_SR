@@ -10,7 +10,7 @@ def modify_file(input_file, output_file):
             new_lines.append(line)
         else:
             parts = line.strip().split()
-            parts[-1] = "1"   # 修改最后一列
+            parts[-1] = "0"   # 修改最后一列
             new_lines.append(" ".join(parts) + "\n")
 
     with open(output_file, "w") as f:
@@ -24,7 +24,7 @@ def write_range_line(k, output_file):
 
 if __name__ == "__main__":
     input_path = "L_24.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow.txt"
-    output_path = "L_24.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_packet.txt"
-    SR_output_path = "L_24.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_packet_SR_host.txt"
+    output_path = "L_24.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_flow.txt"
+    SR_output_path = "L_24.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_flow_SR_host.txt"
     modify_file(input_path, output_path)
     write_range_line(255, SR_output_path)

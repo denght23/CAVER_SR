@@ -116,6 +116,8 @@ class CaverAckTag : public Tag{
         uint32_t GetLastSwitchId(void) const;
         uint32_t GetHostId(void) const;
         void SetHostId(uint32_t host_id);
+        void SetQuequeLength(uint32_t queque_length) {m_queque_length = queque_length;}
+        uint32_t GetQuequeLength(void) const {return m_queque_length;}
         virtual TypeId GetInstanceTypeId(void) const;
         virtual uint32_t GetSerializedSize(void) const;
         virtual void Serialize(TagBuffer i) const;
@@ -129,7 +131,11 @@ class CaverAckTag : public Tag{
         uint32_t best_ce;
         uint32_t m_last_switch_id;
         uint32_t m_host_id;
+        uint32_t m_queque_length;
 };
+
+
+typedef Callback<uint32_t, uint32_t> GetPortQueueLengthCallback;
 
 class CaverRouting : public Object {
 
@@ -180,7 +186,12 @@ class CaverRouting : public Object {
                       Time patchoiceTimeout, 
                       uint32_t pathChoice_num, 
                       Time tau, 
-                      bool useEWMA);
+                      bool useEWMA,
+                      bool perHostRouting,
+                      uint32_t perHostRoutingScheme,
+                      uint32_t metricChoice,
+                      uint32_t dataBackupRoute,      // 新增参数
+                      uint32_t ackRoute);
     void SetSwitchInfo(bool isToR, uint32_t switch_id);
     void SetLinkCapacity(uint32_t outPort, uint64_t bitRate);
 
@@ -243,6 +254,36 @@ class CaverRouting : public Object {
 
     uint32_t m_pathChoice_num; // Number of paths stored in each destination of the PathChoiceTable
 
+    uint32_t data_backup_route = 1; // 0: ECMP, 1: greedy, 2: oblivious
+    uint32_t ack_route = 2; //0: ECMP, 1: greedy, 2: oblivious
+
+    uint32_t metric_choice = 1; // 0: DRE, 1: queue; ACK piggyback information
+
+            // per-host routing 
+    bool per_host_routing = true;
+    uint32_t per_host_routing_scheme = 1; // 0: like caver, 1: per-host dynamic 
+    void Update_PathChoiceTable(ns3::CaverAckTag& ackTag, uint32_t& localCE,
+                                              uint32_t& currentBestCE, uint32_t totalBestCE,
+                                              uint32_t& host_ip, uint32_t inPort, ns3::Time& now,
+                                              uint32_t host_id);
+        // 新增：per-hop caver相关函数
+    void InitPerHopCaverTable(uint32_t host_id, const std::vector<uint32_t>& ports);
+    void UpdatePerHopCaverInfo(uint32_t host_id, uint32_t port, uint32_t remoteCE, Time updateTime);
+    PerHopCaverInfo GetPerHopCaverInfo(uint32_t host_id, uint32_t port) const;
+    void PrintPerHopCaverTable() const;
+    void PerHopAgingEvent();
+    void SetPerHopAgingTime(Time agingTime);
+
+    uint32_t ChooseNextHopByPerHopCaver(uint32_t host_id);
+    uint32_t ChooseNextHopByPerHopCaverWithQueue(uint32_t host_id);
+
+    void SetGetPortQueueLengthCallback(GetPortQueueLengthCallback callback);
+    uint32_t GetPortTotalQueueLength(uint32_t port);
+    uint32_t GetMinValidMetricWithQueueLength(uint32_t host_id);
+    void LogPerHopCaverChoice(uint32_t host_id, const std::map<uint32_t, PerHopCaverInfo>& port_map);
+    bool Perhop_log = false;
+    bool Perhop_debug_log = false;
+    
     private:
         SwitchSendCallback m_switchSendCallback;  // bound to SwitchNode::SwitchSend (for Request/UDP)
         SwitchSendToDevCallback m_switchSendToDevCallback;  // bound to SwitchNode::SendToDevContinue (for Probe, Reply)
@@ -274,6 +315,14 @@ class CaverRouting : public Object {
         uint32_t ToR_host_num;
 
         double m_ce_threshold; // CE threshold, should be a number greater than 1
+
+        std::unordered_map<uint32_t, std::map<uint32_t, PerHopCaverInfo>> per_hop_caver_table;
+        EventId m_perHopAgingEvent;
+        Time m_perHopAgingTime;
+
+        GetPortQueueLengthCallback m_getPortQueueLengthCallback;
+    
+        
 };
 
 }

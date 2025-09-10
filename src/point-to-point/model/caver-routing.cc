@@ -24,7 +24,11 @@
  */
 
 #include "ns3/caver-routing.h"
+
+#include <random>
+
 #include "assert.h"
+#include "caver-routing.h"
 #include "ns3/assert.h"
 #include "ns3/event-id.h"
 #include "ns3/ipv4-header.h"
@@ -34,7 +38,8 @@
 #include "ns3/packet.h"
 #include "ns3/settings.h"
 #include "ns3/simulator.h"
-#include <random>
+#include "ns3/boolean.h"
+#include "ns3/uinteger.h"
 
 // NS_LOG_COMPONENT_DEFINE("CaverRouting");
 
@@ -158,7 +163,9 @@ namespace ns3 {
 
     TypeId CaverRouting::GetTypeId(void) {
         static TypeId tid =
-            TypeId("ns3::CaverRouting").SetParent<Object>().AddConstructor<CaverRouting>();
+            TypeId("ns3::CaverRouting")
+                .SetParent<Object>()
+                .AddConstructor<CaverRouting>();
 
         return tid;
     }
@@ -191,6 +198,14 @@ namespace ns3 {
 
     void CaverRouting::SetSwitchSendToDevCallback(SwitchSendToDevCallback switchSendToDevCallback) {
         m_switchSendToDevCallback = switchSendToDevCallback;
+    }
+    void CaverRouting::SetGetPortQueueLengthCallback(GetPortQueueLengthCallback callback) {
+        m_getPortQueueLengthCallback = callback;
+    }
+
+    uint32_t CaverRouting::GetPortTotalQueueLength(uint32_t port) {
+        // 通过回调函数获取MMU中的队列信息
+        return m_getPortQueueLengthCallback(port);
     }
 
     void CaverRouting::SetSwitchInfo(bool isToR, uint32_t switch_id) {
@@ -229,6 +244,59 @@ namespace ns3 {
             // m_switch_id << Simulator::Now());
             m_DreMap[outPort] = newX;
             return newX;
+        }
+    }
+    void CaverRouting::InitPerHopCaverTable(uint32_t host_id, const std::vector<uint32_t>& ports) {
+        // 为指定的host_id初始化per-hop caver表项
+        for (uint32_t port : ports) {
+            per_hop_caver_table[host_id][port] = PerHopCaverInfo(); // 使用默认构造函数，初始为无效
+        }
+        
+        // 启动过期检查事件（如果还没启动的话）
+        if (!m_perHopAgingEvent.IsRunning()) {
+            m_perHopAgingEvent = Simulator::Schedule(m_perHopAgingTime, &CaverRouting::PerHopAgingEvent, this);
+        }
+    }
+    void CaverRouting::UpdatePerHopCaverInfo(uint32_t host_id, uint32_t port, uint32_t remoteCE, Time updateTime) {
+        // 更新指定host_id和port的信息
+        auto host_it = per_hop_caver_table.find(host_id);
+        if (host_it != per_hop_caver_table.end()) {
+            auto port_it = host_it->second.find(port);
+            if (port_it != host_it->second.end()) {
+                port_it->second.remoteCE = remoteCE;
+                port_it->second.updateTime = updateTime;
+                port_it->second.valid = true;
+            }
+        }
+    }
+    // 新增GetPerHopCaverInfo函数
+    PerHopCaverInfo CaverRouting::GetPerHopCaverInfo(uint32_t host_id, uint32_t port) const {
+        // 获取指定host_id和port的完整信息
+        auto host_it = per_hop_caver_table.find(host_id);
+        if (host_it != per_hop_caver_table.end()) {
+            auto port_it = host_it->second.find(port);
+            if (port_it != host_it->second.end()) {
+                return port_it->second;
+            }
+        }
+        return PerHopCaverInfo(); // 返回默认（无效）信息
+    }
+
+
+    // 修改PrintPerHopCaverTable函数
+    void CaverRouting::PrintPerHopCaverTable() const {
+        std::cout << "Per-Hop Caver Table for Switch " << m_switch_id << ":" << std::endl;
+        for (const auto& host_entry : per_hop_caver_table) {
+            uint32_t host_id = host_entry.first;
+            std::cout << "  Host " << host_id << ":" << std::endl;
+            for (const auto& port_entry : host_entry.second) {
+                uint32_t port = port_entry.first;
+                const PerHopCaverInfo& info = port_entry.second;
+                std::cout << "    Port " << port 
+                        << " -> RemoteCE: " << info.remoteCE
+                        << ", UpdateTime: " << info.updateTime.GetMicroSeconds() << "us"
+                        << ", Valid: " << (info.valid ? "true" : "false") << std::endl;
+            }
         }
     }
 
@@ -282,14 +350,18 @@ namespace ns3 {
     void CaverRouting::RouteInput(Ptr<Packet> p, CustomHeader ch){
         // Packet arrival time
         Time now = Simulator::Now();
-        if (ch.l3Prot != 0x11 && ch.l3Prot != 0xFC) {
-            // if not ack or udp packet, use ECMP 
+        if (ch.l3Prot != 0x11 && ch.l3Prot != 0xFC && ch.l3Prot != 0xFD) {
+            // if not ack or udp packet,
             DoSwitchSendToDev(p, ch);
             return;
         }
-        if (ch.l3Prot != 0x11 && ch.l3Prot != 0xFC) {
-            assert(false && "l3Prot is not 0x11 or 0xFC");
+
+        if (ch.l3Prot != 0x11 && ch.l3Prot != 0xFC && ch.l3Prot != 0xFD) {
+            assert(false);
         }
+
+
+
 
         //This code is used to filter ACK packets with specific sequence numbers to simulate the performance of Caver under different ACK ratios.
         //if (ch.l3Prot == 0xFC) {
@@ -347,24 +419,44 @@ namespace ns3 {
                     auto it = Settings::reorderable.find(flow_key);
                     bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
                     if (flow_reorderable) {
-                        uint32_t outPort;
-                        // 若BestTable里存在表项，则选择BestTable里储存的下一跳；
-                        if (best_pathCE_Table[ch.dip]._valid){
-                            outPort = best_pathCE_Table[ch.dip]._path[0];
-                            udpTag.SetSrcRouteEnable(false);
-                            udpTag.SetPathId(0);
+                        if(per_host_routing_scheme == 0){
+                            uint32_t dip = ch.dip;
+                            CaverRouteChoice  m_choice;
+                            if (show_pathchoice_detail){
+                                m_choice = ChoosePathWithDetail(dip, ch);
+                            }
+                            else{
+                                m_choice = ChoosePath(dip, ch);
+                            }   
+                            udpTag.SetSrcRouteEnable(m_choice.SrcRoute);
+                            udpTag.SetPathId(m_choice.pathid);
                             udpTag.SetHopCount(0);
                             p->AddPacketTag(udpTag);
-                            uint32_t X = UpdateLocalDre(p, ch, outPort);  // update local DRE
-                            DoSwitchSend(p, ch, outPort, ch.udp.pg);
+                            if(m_choice.SrcRoute){
+                                uint32_t X = UpdateLocalDre(p, ch, m_choice.outPort);  // update local DRE
+                                DoSwitchSend(p, ch, m_choice.outPort, ch.udp.pg);
+                            }
+                            else{
+                                DoSwitchSendToDev(p, ch);
+                                if (Route_log){
+                                    std::cout << "ToR switch: " << m_switch_id << " UDP packet: " << PARSE_FIVE_TUPLE(ch) << " ecmp " <<" new flowlet" <<std::endl;
+                                }
+                            }
                             return;
-                        }
-                        else{//若BestTable里不存在表项，则选择队列最小端口作为下一跳；
+                        } else if (per_host_routing_scheme == 1){
+                            uint32_t host_id = Settings::hostIp2IdMap[ch.dip];
+                            uint32_t outport;
+                            if(metric_choice == 1){
+                                outport = ChooseNextHopByPerHopCaverWithQueue(host_id);
+                            }else{
+                                outport = ChooseNextHopByPerHopCaver(host_id);
+                            }
                             udpTag.SetSrcRouteEnable(false);
                             udpTag.SetPathId(0);
                             udpTag.SetHopCount(0);
                             p->AddPacketTag(udpTag);
-                            DoSwitchSendToDev(p, ch);
+                            uint32_t X = UpdateLocalDre(p, ch, outport);  // update local DRE
+                            DoSwitchSend(p, ch, outport, ch.udp.pg);
                             return;
                         }
                     }
@@ -541,18 +633,66 @@ namespace ns3 {
             bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
             uint32_t outPort;
             if (flow_reorderable){
-                if (best_pathCE_Table[ch.dip]._valid){
-                    outPort = best_pathCE_Table[ch.dip]._path[0];
-                    p->AddPacketTag(udpTag);
-                    uint32_t X = UpdateLocalDre(p, ch, outPort);  // update local DRE
-                    DoSwitchSend(p, ch, outPort, ch.udp.pg);
-                    return;
+                if (!per_host_routing){
+                    if (best_pathCE_Table[ch.dip]._valid){
+                        outPort = best_pathCE_Table[ch.dip]._path[0];
+                        p->AddPacketTag(udpTag);
+                        uint32_t X = UpdateLocalDre(p, ch, outPort);  // update local DRE
+                        DoSwitchSend(p, ch, outPort, ch.udp.pg);
+                        return;
+                    }
+                    else{
+                        p->AddPacketTag(udpTag);
+                        DoSwitchSendToDev(p, ch);
+                        return;
+                    }
+                }else{
+                    if (per_host_routing_scheme == 0){
+                        uint32_t dip = ch.dip;
+                        CaverRouteChoice  m_choice;
+                        if (show_pathchoice_detail){
+                            m_choice = ChoosePathWithDetail(dip, ch);
+                        }
+                        else{
+                            m_choice = ChoosePath(dip, ch);
+                        }   
+                        if(m_choice.SrcRoute){
+                            udpTag.SetSrcRouteEnable(m_choice.SrcRoute);
+                            udpTag.SetPathId(m_choice.pathid);
+                            udpTag.SetHopCount(0);
+                            p->AddPacketTag(udpTag);
+                            uint32_t X = UpdateLocalDre(p, ch, m_choice.outPort);  // update local DRE
+                            DoSwitchSend(p, ch, m_choice.outPort, ch.udp.pg);
+                        }
+                        else{
+                            uint32_t hopCount = udpTag.GetHopCount() + 1;
+                            udpTag.SetHopCount(hopCount);
+                            uint8_t src_enable = udpTag.GetSrcRouteEnable();
+                            if (src_enable){
+                                uint32_t pathid = udpTag.GetPathId();
+                                uint32_t outPort = GetOutPortFromPath(pathid, hopCount);
+                                p->AddPacketTag(udpTag);
+                                uint32_t X = UpdateLocalDre(p, ch, outPort);  // update local DRE
+                                DoSwitchSend(p, ch, outPort, ch.udp.pg);
+                            }else{
+                                DoSwitchSendToDev(p, ch);
+                            }
+                        }
+                        return;
+                    } else if (per_host_routing_scheme == 1){
+                        uint32_t host_id = Settings::hostIp2IdMap[ch.dip];
+                        if (metric_choice == 1) {
+                            outPort = ChooseNextHopByPerHopCaverWithQueue(host_id);
+                        }else{
+                            outPort = ChooseNextHopByPerHopCaver(host_id);
+                        }
+                        p->AddPacketTag(udpTag);
+                        uint32_t X = UpdateLocalDre(p, ch, outPort);  // update local DRE
+                        DoSwitchSend(p, ch, outPort, ch.udp.pg);
+                        return;
+                    }
                 }
-                else{
-                    p->AddPacketTag(udpTag);
-                    DoSwitchSendToDev(p, ch);
-                    return;
-                }
+                
             }
 
             assert(found && "If not ToR (leaf),CaverTag should be found");
@@ -586,7 +726,7 @@ namespace ns3 {
                 return;
             }
         }
-        else if (ch.l3Prot == 0xFC){
+        else if (ch.l3Prot == 0xFC || ch.l3Prot == 0xFD){
             // ACK PACKET       
             CaverAckTag ackTag;
             bool found = p->PeekPacketTag(ackTag);
@@ -615,6 +755,11 @@ namespace ns3 {
                     ackTag.SetLength(0);
                     ackTag.SetLastSwitchId(m_switch_id);
                     ackTag.SetHostId(sid);
+                    
+                    if(metric_choice == 1){
+                        uint32_t queueLength = GetPortTotalQueueLength(port);
+                        ackTag.SetQuequeLength(queueLength);
+                    }
                     p->AddPacketTag(ackTag);
 
                     if (ACK_log){
@@ -695,90 +840,20 @@ namespace ns3 {
                     printBestPathCETable_Entry(host_ip);
                 }
 
-                // *******************************Determine whether the path information carried by the packet should be retained or filtered.**********************//
-                uint32_t remoteMCE = ackTag.GetMCE();
-                uint32_t totalMCE = std::max(localCE, remoteMCE);
-                bool M_is_usable = false;
-                //if (totalMCE <= m_ce_threshold * currentBestCE){
-                //    M_is_usable = true;
-                //}
-
-                if ((256 - std::min(totalMCE, 256u)) * m_ce_threshold >= 256 - (std::min(currentBestCE, 256u))) {
-                    M_is_usable = true;
-                }
-
+                Update_PathChoiceTable(ackTag, localCE, currentBestCE, totalBestCE, host_ip, inPort,
+                                       now, host_id);
                 
-                if(PathChoice_log){
-                    printf("PathChoice info: current: Dst switch %d\n", m_switch_id);
-                    printf("MCE: %d, BestCE: %d, currentBestCE: %d\n", totalMCE, totalBestCE, currentBestCE);
-                    std::cout << "If acceptable: " << (M_is_usable ? "true" : "false") << "\n";
-                }
-
-                // *******************************update pathChoiceTable**********************//
-                // get the index of current pathChoiceTable
-                auto flagItr = PathChoiceFlagMap.find(host_ip);
-                assert(flagItr != PathChoiceFlagMap.end() && "Cannot find dip from PathChoiceFlagMap");
-                uint32_t flag = PathChoiceFlagMap[host_ip];
-                PathChoiceInfo newPathChoice;
-                if (M_is_usable){
-                    std::vector<uint8_t> path;
-                    path.push_back((uint8_t(inPort)));
-                    std::vector<uint8_t> fullpath = uint32_to_uint8(ackTag.GetMPathId());
-                    for (int i = 0; i < ackTag.GetLength(); i++) {
-                        path.push_back(fullpath [i]);
-                    }  
-                    newPathChoice._path = path;
-                    newPathChoice._updateTime = now;
-                    newPathChoice._is_used = false;
-                    newPathChoice._remoteCE = remoteMCE;
-                }
-                else{
-                    newPathChoice._path = best_pathCE_Table[host_ip]._path;
-                    newPathChoice._updateTime = now;
-                    newPathChoice._is_used = false;
-                    newPathChoice._remoteCE = best_pathCE_Table[host_ip]._ce;
-                }
-                if(PathChoice_log){
-                    // *******************************Display the relevant information when updating the PathChoiceTable.**********************//
-                    printf("PathChoice info: current: Dst switch %d\n", m_switch_id);
-                    // 更新相关的信息
-                    if(M_is_usable){
-                        printf("MCE is usable, update with ACK carried path\n");
+                if (per_host_routing){
+                    if (per_host_routing_scheme == 1){
+                        if (metric_choice == 1){
+                            UpdatePerHopCaverInfo(host_id, inPort, ackTag.GetQuequeLength(), now);
+                        }else{
+                            UpdatePerHopCaverInfo(host_id, inPort, remoteBestCE, now);
+                        }
                     }
-                    else{
-                        printf("MCE is not usable, update with best_pathCE_Table\n");
-                    }
-                    printf("before update PathChoiceMapTable\n");
-                    printPathChoiceFlagMap_Entry(host_ip);
-                    showPathChoiceInfo(newPathChoice);
-                    printf("update index: %d\n", flag);
-                }
+                }                       
 
-
-                PathChoiceTable[host_ip][flag] = newPathChoice;
-                PathChoiceFlagMap[host_ip] = (PathChoiceFlagMap[host_ip] + 1) % m_pathChoice_num;
-
-                // *******************************Display the relevant information when updating the PathChoiceTable.**********************//
-                if(PathChoice_log){
-                    printf("after update PathChoiceTable\n");
-                    printPathChoiceTable_Entry(host_ip);
-                    printf("after update PathChoiceMapTable\n");
-                    printPathChoiceFlagMap_Entry(host_ip);
-                }
-        
-                fprintf(Settings::caverLog, "Time:%ld, Switch:%u, Did:%u, update:%d, M_is_usable:%d, totalBestCe:%u|", 
-                    Simulator::Now().GetNanoSeconds(), m_switch_id, host_id, update, M_is_usable, totalBestCE);
-                std::vector<uint8_t> path;
-                path.push_back((uint8_t(inPort)));
-                std::vector<uint8_t> fullpath = uint32_to_uint8(ackTag.GetMPathId());
-                for (int i = 0; i < ackTag.GetLength(); i++) {
-                    path.push_back(fullpath[i]);
-                }                  
-                auto node_path = getPathNodeIds(path, m_switch_id);
-                for (uint32_t node_id : node_path) {
-                    fprintf(Settings::caverLog,"%u ", node_id);
-                }
-                fprintf(Settings::caverLog, "\n");p->RemovePacketTag(ackTag);
+                p->RemovePacketTag(ackTag);
                 
                 DoSwitchSendToDev(p, ch);
                 if(Packet_begin_end_flag){
@@ -851,6 +926,21 @@ namespace ns3 {
                 printf("After update BestTable\n");
                 printBestPathCETable_Entry(host_ip);
             }
+            // ******************************update pathchoice_table###################
+            if (per_host_routing){
+                if (per_host_routing_scheme == 0){
+                    Update_PathChoiceTable(ackTag, localCE, currentBestCE, totalBestCE, host_ip, inPort,
+                                        now, host_id);
+                } else if (per_host_routing_scheme == 1){
+                    if (metric_choice == 1){
+                        UpdatePerHopCaverInfo(host_id, inPort, ackTag.GetQuequeLength(), now);
+                        ackTag.SetQuequeLength(GetMinValidMetricWithQueueLength(host_id));
+                    }else{
+                    UpdatePerHopCaverInfo(host_id, inPort, remoteBestCE, now);
+                    }
+                }
+            }
+            
             // *******************************Determine whether the path information carried by the packet should be retained or filtered.**********************//
             uint32_t remoteMCE = ackTag.GetMCE();
             uint32_t totalMCE = std::max(localCE, remoteMCE);
@@ -965,8 +1055,240 @@ namespace ns3 {
         }
     }
 
+    void CaverRouting::Update_PathChoiceTable(ns3::CaverAckTag& ackTag, uint32_t& localCE,
+                                              uint32_t& currentBestCE, uint32_t totalBestCE,
+                                              uint32_t& host_ip, uint32_t inPort, ns3::Time& now,
+                                              uint32_t host_id) {
+        // *******************************Determine whether the path information carried by the
+        // packet should be retained or filtered.**********************//
+        uint32_t remoteMCE = ackTag.GetMCE();
+        uint32_t totalMCE = std::max(localCE, remoteMCE);
+        bool M_is_usable = false;
+        // if (totalMCE <= m_ce_threshold * currentBestCE){
+        //     M_is_usable = true;
+        // }
 
-    CaverRouteChoice CaverRouting::ChoosePath(uint32_t dip, CustomHeader ch){
+        if ((256 - std::min(totalMCE, 256u)) * m_ce_threshold >=
+            256 - (std::min(currentBestCE, 256u))) {
+            M_is_usable = true;
+        }
+
+        if (PathChoice_log) {
+            printf("PathChoice info: current: Dst switch %d\n", m_switch_id);
+            printf("MCE: %d, BestCE: %d, currentBestCE: %d\n", totalMCE, totalBestCE,
+                   currentBestCE);
+            std::cout << "If acceptable: " << (M_is_usable ? "true" : "false") << "\n";
+        }
+
+        // *******************************update pathChoiceTable**********************//
+        // get the index of current pathChoiceTable
+        auto flagItr = PathChoiceFlagMap.find(host_ip);
+        assert(flagItr != PathChoiceFlagMap.end() && "Cannot find dip from PathChoiceFlagMap");
+        uint32_t flag = PathChoiceFlagMap[host_ip];
+        PathChoiceInfo newPathChoice;
+        if (M_is_usable) {
+            std::vector<uint8_t> path;
+            path.push_back((uint8_t(inPort)));
+            std::vector<uint8_t> fullpath = uint32_to_uint8(ackTag.GetMPathId());
+            for (int i = 0; i < ackTag.GetLength(); i++) {
+                path.push_back(fullpath[i]);
+            }
+            newPathChoice._path = path;
+            newPathChoice._updateTime = now;
+            newPathChoice._is_used = false;
+            newPathChoice._remoteCE = remoteMCE;
+        } else {
+            newPathChoice._path = best_pathCE_Table[host_ip]._path;
+            newPathChoice._updateTime = now;
+            newPathChoice._is_used = false;
+            newPathChoice._remoteCE = best_pathCE_Table[host_ip]._ce;
+        }
+        if (PathChoice_log) {
+            // *******************************Display the relevant information when updating the
+            // PathChoiceTable.**********************//
+            printf("PathChoice info: current: Dst switch %d\n", m_switch_id);
+            // 更新相关的信息
+            if (M_is_usable) {
+                printf("MCE is usable, update with ACK carried path\n");
+            } else {
+                printf("MCE is not usable, update with best_pathCE_Table\n");
+            }
+            printf("before update PathChoiceMapTable\n");
+            printPathChoiceFlagMap_Entry(host_ip);
+            showPathChoiceInfo(newPathChoice);
+            printf("update index: %d\n", flag);
+        }
+
+        PathChoiceTable[host_ip][flag] = newPathChoice;
+        PathChoiceFlagMap[host_ip] = (PathChoiceFlagMap[host_ip] + 1) % m_pathChoice_num;
+
+        // *******************************Display the relevant information when updating the
+        // PathChoiceTable.**********************//
+        if (PathChoice_log) {
+            printf("after update PathChoiceTable\n");
+            printPathChoiceTable_Entry(host_ip);
+            printf("after update PathChoiceMapTable\n");
+            printPathChoiceFlagMap_Entry(host_ip);
+        }
+
+        fprintf(Settings::caverLog,
+                "Time:%ld, Switch:%u, Did:%u, M_is_usable:%d, totalBestCe:%u|",
+                Simulator::Now().GetNanoSeconds(), m_switch_id, host_id, M_is_usable,
+                totalBestCE);
+        std::vector<uint8_t> path;
+        path.push_back((uint8_t(inPort)));
+        std::vector<uint8_t> fullpath = uint32_to_uint8(ackTag.GetMPathId());
+        for (int i = 0; i < ackTag.GetLength(); i++) {
+            path.push_back(fullpath[i]);
+        }
+        auto node_path = getPathNodeIds(path, m_switch_id);
+        for (uint32_t node_id : node_path) {
+            fprintf(Settings::caverLog, "%u ", node_id);
+        }
+        fprintf(Settings::caverLog, "\n");
+    }
+    void CaverRouting::LogPerHopCaverChoice(uint32_t host_id, const std::map<uint32_t, PerHopCaverInfo>& port_map) {
+        // 如果只有一个端口，不进行显示
+        if (port_map.size() <= 1) {
+            return;
+        }
+        
+        // 获取当前时间（微秒）
+        uint64_t now_us = Simulator::Now().GetMicroSeconds();
+        
+        // 使用stringstream来构建输出，减少多次输出的开销
+        std::ostringstream oss;
+        oss << "[PERHOP_CHOICE] T:" << now_us << " S:" << m_switch_id << " H:" << host_id;
+        
+        // 遍历所有端口，输出相关信息
+        for (const auto& port_entry : port_map) {
+            uint32_t port = port_entry.first;
+            const PerHopCaverInfo& info = port_entry.second;
+            
+            
+            uint32_t local_ce = QuantizingX(port, m_DreMap[port]);
+            
+            // 输出格式: P:端口号|L:本地CE|R:远程CE|T:更新时间|V:是否有效
+            oss << " P:" << port 
+                << "|LQ:"<< GetPortTotalQueueLength(port)
+                << "|LCE:" << local_ce 
+                << "|R:" << info.remoteCE 
+                << "|T:" << info.updateTime.GetMicroSeconds() 
+                << "|V:" << (info.valid ? "1" : "0");
+        }
+        
+        // 一次性输出整行
+        std::cout << oss.str() << std::endl;
+    }
+    
+    // 修改ChooseNextHopByPerHopCaver函数
+    uint32_t CaverRouting::ChooseNextHopByPerHopCaver(uint32_t host_id) {
+        if (Route_log) {
+            std::cout << "[PerHopCaver] Switch " << m_switch_id 
+                    << ", Choosing next hop for Host " << host_id << std::endl;
+            fflush(stdout);
+        }
+        // 从per-hop表中获取所有可用端口
+        auto host_it = per_hop_caver_table.find(host_id);
+        assert(host_it != per_hop_caver_table.end() && "No per-hop caver table entry found for host");
+        
+        const auto& port_map = host_it->second;
+        assert(!port_map.empty() && "No ports available in per-hop caver table for host");
+        
+        // 第一步：计算每个端口的评价指标
+        std::map<uint32_t, uint32_t> port_metrics;
+        uint32_t min_metric = UINT32_MAX;
+        
+        for (const auto& port_entry : port_map) {
+            uint32_t port = port_entry.first;
+            const PerHopCaverInfo& info = port_entry.second;
+            
+            uint32_t local_ce = QuantizingX(port, m_DreMap[port]);
+            uint32_t metric = local_ce; // 默认使用localCE
+            
+            // 检查per-hop表中是否有有效的记录
+            if (info.valid) {
+                // 如果有效，使用max(localCE, remoteCE)
+                metric = std::max(local_ce, info.remoteCE);
+            }
+            
+            port_metrics[port] = metric;
+            min_metric = std::min(min_metric, metric);
+            
+            if (Route_log) {
+                std::cout << "[PerHopCaver] Switch " << m_switch_id 
+                        << ", Host " << host_id << ", Port " << port 
+                        << ", LocalCE: " << local_ce 
+                        << ", RemoteCE: " << (info.valid ? info.remoteCE : 0)
+                        << ", Valid: " << (info.valid ? "true" : "false")
+                        << ", Metric: " << metric << std::endl;
+                fflush(stdout);
+                
+            }
+            
+        }
+        
+        // 第二步：使用阈值筛选可用端口
+        std::vector<uint32_t> usable_ports;
+        
+        for (const auto& metric_entry : port_metrics) {
+            uint32_t port = metric_entry.first;
+            uint32_t port_metric = metric_entry.second;
+            
+            // 使用与原代码相同的阈值判断逻辑
+            if ((256 - std::min(port_metric, 256u)) * m_ce_threshold >= 
+                256 - std::min(min_metric, 256u)) {
+                usable_ports.push_back(port);
+                
+                if (Route_log) {
+                    std::cout << "[PerHopCaver] Port " << port << " is usable"
+                            << ", Metric: " << port_metric 
+                            << ", MinMetric: " << min_metric << std::endl;
+                }
+            } else {
+                if (Route_log) {
+                    std::cout << "[PerHopCaver] Port " << port << " filtered out"
+                            << ", Metric: " << port_metric 
+                            << ", MinMetric: " << min_metric << std::endl;
+                }
+            }
+        }
+        
+        // 第三步：随机选择一个端口
+        if (usable_ports.empty()) {
+            // 如果没有满足阈值的端口，使用最小metric的端口
+            for (const auto& metric_entry : port_metrics) {
+                if (metric_entry.second == min_metric) {
+                    usable_ports.push_back(metric_entry.first);
+                }
+            }
+            
+            if (Route_log) {
+                std::cout << "[PerHopCaver] No ports meet threshold, using best metric ports" << std::endl;
+            }
+        }
+        
+        // 确保有可用端口，否则终止程序
+        assert(!usable_ports.empty() && "No usable ports found for per-hop caver routing");
+        
+        // 随机选择
+        if (usable_ports.size() == 1) {
+            return usable_ports[0];
+        } else {
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> dis(0, usable_ports.size() - 1);
+            uint32_t selected_port = usable_ports[dis(gen)];
+            
+            if (Route_log) {
+                std::cout << "[PerHopCaver] Randomly selected port " << selected_port 
+                        << " from " << usable_ports.size() << " usable ports" << std::endl;
+            }
+            
+            return selected_port;
+        }
+    }
+    CaverRouteChoice CaverRouting::ChoosePath(uint32_t dip, CustomHeader ch) {
         auto now = Simulator::Now();
         auto pathItr = PathChoiceTable.find(dip);
         assert(pathItr != PathChoiceTable.end() && "Cannot find dip from PathChoiceTable");
@@ -1029,6 +1351,90 @@ namespace ns3 {
                 choice.pathid = 0;
             }
             return choice;
+        }
+    }
+    // 在 caver-routing.cc 中添加函数实现
+    uint32_t CaverRouting::ChooseNextHopByPerHopCaverWithQueue(uint32_t host_id) {
+        auto host_it = per_hop_caver_table.find(host_id);
+        assert(host_it != per_hop_caver_table.end() && "No per-hop caver table entry found for host");
+        
+        const auto& port_map = host_it->second;
+        assert(!port_map.empty() && "No ports available in per-hop caver table for host");
+        if(Perhop_log){
+            LogPerHopCaverChoice(host_id, port_map);
+        }
+        
+        // 第一步：计算每个端口的指标，只考虑valid的表项
+        std::map<uint32_t, uint32_t> valid_port_metrics; // 只存储valid端口的指标
+        std::map<uint32_t, uint32_t> all_port_queues;    // 存储所有端口的队列长度
+        
+        for (const auto& port_entry : port_map) {
+            uint32_t port = port_entry.first;
+            const PerHopCaverInfo& info = port_entry.second;
+            
+            // 获取当前端口的队列长度
+            uint32_t queue_length = GetPortTotalQueueLength(port);
+            all_port_queues[port] = queue_length;
+            
+            // 只计算valid表项的指标
+            if (info.valid) {
+                uint32_t metric = info.remoteCE + queue_length;
+                valid_port_metrics[port] = metric;
+            } 
+        }
+        
+        // 第二步：选择端口
+        if (!valid_port_metrics.empty()) {
+            // 有valid表项，找出最小指标的端口
+            uint32_t min_metric = UINT32_MAX;
+            for (const auto& metric_entry : valid_port_metrics) {
+                min_metric = std::min(min_metric, metric_entry.second);
+            }
+            uint32_t threshold = static_cast<uint32_t>(min_metric * m_ce_threshold);
+            // 收集所有具有最小指标的端口
+            std::vector<uint32_t> usable_ports;
+            for (const auto& metric_entry : valid_port_metrics) {
+                if (metric_entry.second <= threshold) {
+                    usable_ports.push_back(metric_entry.first);
+                }
+            }
+            
+            // 从最小指标的端口中随机选择一个
+            assert(!usable_ports.empty() && "No best ports found");
+            
+            if (usable_ports.size() == 1) {
+                return usable_ports[0];
+            } else {
+                std::random_device rd;
+                std::mt19937 gen(rd());
+                std::uniform_int_distribution<> dis(0, usable_ports.size() - 1);
+                uint32_t selected_port = usable_ports[dis(gen)];              
+                return selected_port;
+            }
+        } else {       
+            uint32_t min_queue = UINT32_MAX;
+            for (const auto& queue_entry : all_port_queues) {
+                min_queue = std::min(min_queue, queue_entry.second);
+            }
+            
+            // 收集所有具有最小队列长度的端口
+            std::vector<uint32_t> min_queue_ports;
+            for (const auto& queue_entry : all_port_queues) {
+                if (queue_entry.second == min_queue) {
+                    min_queue_ports.push_back(queue_entry.first);
+                }
+            }
+            assert(!min_queue_ports.empty() && "No ports found with minimum queue length");
+            
+            if (min_queue_ports.size() == 1) {
+                return min_queue_ports[0];
+            } else {
+                std::random_device rd;
+                std::mt19937 gen(rd());
+                std::uniform_int_distribution<> dis(0, min_queue_ports.size() - 1);
+                uint32_t selected_port = min_queue_ports[dis(gen)];
+                return selected_port;
+            }
         }
     }
     CaverRouteChoice CaverRouting::ChoosePathWithDetail(uint32_t dip, CustomHeader ch) {
@@ -1107,6 +1513,7 @@ namespace ns3 {
         std::cout << std::endl;
         return choice;
     }
+
     uint32_t CaverRouting::Vector2PathId(std::vector<uint8_t> vec) {
         uint32_t result = 0; 
         result |= vec[0];
@@ -1143,7 +1550,8 @@ namespace ns3 {
     }
     void CaverRouting::SetConstants(Time dreTime, Time agingTime, Time flowletTimeout,
                                     uint32_t quantizeBit, double alpha, double ce_threshold, Time patchoiceTimeout, uint32_t pathChoice_num, 
-                                    Time tau, bool useEWMA) {
+                                    Time tau, bool useEWMA,
+                                    bool perHostRouting, uint32_t perHostRoutingScheme, uint32_t metricChoice, uint32_t dataBackupRoute, uint32_t ackRoute) {
         m_dreTime = dreTime;
         m_agingTime = agingTime;
         m_flowletTimeout = flowletTimeout;
@@ -1153,8 +1561,16 @@ namespace ns3 {
         m_ce_threshold = ce_threshold;
         m_patchoiceTimeout = patchoiceTimeout;
         m_pathChoice_num = pathChoice_num;
+
+        m_perHopAgingTime = patchoiceTimeout;
+
         this->tau = tau;
         this->useEWMA = useEWMA;
+        this->per_host_routing = perHostRouting;
+        this->per_host_routing_scheme = perHostRoutingScheme;
+        this->metric_choice = metricChoice; 
+        this->data_backup_route = dataBackupRoute;      // 新增设置
+        this->ack_route = ackRoute; 
     }
 
     void CaverRouting::DoDispose() {
@@ -1163,6 +1579,7 @@ namespace ns3 {
         }
         m_dreEvent.Cancel();
         m_agingEvent.Cancel();
+        m_perHopAgingEvent.Cancel();
     }
 
     void CaverRouting::DreEvent() {
@@ -1487,4 +1904,107 @@ namespace ns3 {
 
             return *it;
         }
+    // 新增PerHopAgingEvent函数
+    void CaverRouting::PerHopAgingEvent() {
+        // std::cout << "check here " << std::endl;
+        // fflush(stdout);
+        auto now = Simulator::Now();
+        
+        if (Route_log) {
+            std::cout << "[PerHopAging] Switch " << m_switch_id 
+                    << " checking aging at time " << now.GetMicroSeconds() << "us" << std::endl;
+        }
+        
+        // 遍历所有表项，检查是否过期
+        for (auto& host_entry : per_hop_caver_table) {
+            uint32_t host_id = host_entry.first;
+            for (auto& port_entry : host_entry.second) {
+                uint32_t port = port_entry.first;
+                PerHopCaverInfo& info = port_entry.second;
+                
+                // 如果表项有效且已过期，则标记为无效
+                if (info.valid && (now - info.updateTime > m_perHopAgingTime)) {
+                    info.valid = false;
+                    
+                    if (Route_log) {
+                        std::cout << "[PerHopAging] Switch " << m_switch_id 
+                                << " invalidated entry: Host " << host_id 
+                                << ", Port " << port << std::endl;
+                    }
+                }
+            }
+        }
+        
+        // 调度下一次过期检查
+        m_perHopAgingEvent = Simulator::Schedule(m_perHopAgingTime, &CaverRouting::PerHopAgingEvent, this);
+    }
+
+    // 新增SetPerHopAgingTime函数
+    void CaverRouting::SetPerHopAgingTime(Time agingTime) {
+        m_perHopAgingTime = agingTime;
+    }
+    // 在 caver-routing.cc 中添加函数实现
+    uint32_t CaverRouting::GetMinValidMetricWithQueueLength(uint32_t host_id) {
+        if (Route_log) {
+            std::cout << "[GetMinValidMetricWithQueueLength] Switch " << m_switch_id 
+                    << ", calculating min metric for Host " << host_id << std::endl;
+        }
+        
+        // 查找指定host_id的表项
+        auto host_it = per_hop_caver_table.find(host_id);
+        assert(host_it != per_hop_caver_table.end() && "No per-hop caver table entry found for host");
+        
+        const auto& port_map = host_it->second;
+        assert(!port_map.empty() && "No ports available in per-hop caver table for host");
+        
+        uint32_t min_metric = UINT32_MAX;
+        bool found_valid = false;
+        
+        // 遍历所有端口
+        for (const auto& port_entry : port_map) {
+            uint32_t port = port_entry.first;
+            const PerHopCaverInfo& info = port_entry.second;
+            
+            // 只处理有效的表项
+            if (info.valid) {
+                // 获取该端口的总队列长度（包括shared和reserved）
+                uint32_t total_queue_length = GetPortTotalQueueLength(port);
+                
+                // 计算指标：remoteCE + 队列总长度
+                uint32_t metric = info.remoteCE + total_queue_length;
+                
+                // 更新最小值
+                if (metric < min_metric) {
+                    min_metric = metric;
+                    found_valid = true;
+                }
+                
+                if (Route_log) {
+                    std::cout << "[GetMinValidMetricWithQueueLength] Switch " << m_switch_id 
+                            << ", Host " << host_id << ", Port " << port 
+                            << ", RemoteCE: " << info.remoteCE
+                            << ", QueueLength: " << total_queue_length
+                            << ", Metric: " << metric << std::endl;
+                }
+            } else {
+                if (Route_log) {
+                    std::cout << "[GetMinValidMetricWithQueueLength] Switch " << m_switch_id 
+                            << ", Host " << host_id << ", Port " << port 
+                            << " is INVALID, skipping" << std::endl;
+                }
+            }
+        }
+        
+        // 确保找到了有效的表项
+        assert(found_valid && "No valid entries found for per-hop caver routing");
+        
+        if (Route_log) {
+            std::cout << "[GetMinValidMetricWithQueueLength] Switch " << m_switch_id 
+                    << ", Host " << host_id 
+                    << ", Min metric: " << min_metric << std::endl;
+        }
+        
+        return min_metric;
+    }
+
 }

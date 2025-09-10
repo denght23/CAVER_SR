@@ -34,6 +34,8 @@ uint64_t RdmaHw::nAllPkts = 0;
 
 FILE* RdmaHw::m_qpStatFile = nullptr;
 bool RdmaHw::m_qpStatEnabled = false;
+FILE* RdmaHw::m_rateChangeFile = nullptr;
+bool RdmaHw::m_rateChangeEnabled = false;
 
 TypeId RdmaHw::GetTypeId(void) {
     static TypeId tid =
@@ -141,8 +143,12 @@ TypeId RdmaHw::GetTypeId(void) {
                           MakeUintegerAccessor(&RdmaHw::m_SR_window), MakeUintegerChecker<uint32_t>())
             .AddAttribute("SrTimeout", "SR timeout value", TimeValue(MicroSeconds(200)),
                           MakeTimeAccessor(&RdmaHw::m_SR_timeout), MakeTimeChecker())
+            .AddAttribute("SrNackTimeout", "SR NACK timeout value", TimeValue(MicroSeconds(400)),
+                          MakeTimeAccessor(&RdmaHw::m_SR_nack_timeout), MakeTimeChecker())  // 新增
             .AddAttribute("SRLog", "Enable SR receiver logs", BooleanValue(false),
-                        MakeBooleanAccessor(&RdmaHw::m_srLog), MakeBooleanChecker());
+                        MakeBooleanAccessor(&RdmaHw::m_srLog), MakeBooleanChecker())
+            .AddAttribute("CcEnabled", "Enable congestion control", BooleanValue(true),
+                        MakeBooleanAccessor(&RdmaHw::m_ccEnabled), MakeBooleanChecker());
             
     return tid;
 }
@@ -156,7 +162,48 @@ RdmaHw::RdmaHw() {
      * SR-specific functions/vars
      *****************************/
     m_SR_timeout = MicroSeconds(200);
+    m_SR_nack_timeout = MicroSeconds(400);
     m_srLog = false;
+}
+
+// 实现 LogRateChange 函数
+// 修改 LogRateChange 函数，只针对 DCQCN 添加 target_rate
+void RdmaHw::LogRateChange(Ptr<RdmaQueuePair> qp, DataRate newRate, const std::string& reason) {
+    if (!m_rateChangeEnabled || m_rateChangeFile == nullptr) {
+        return;
+    }
+
+    // 获取 flow ID
+    uint32_t flow_id = qp->m_flow_id;
+    if (flow_id < 0) {
+        assert(false && "Invalid flow ID");
+    }
+
+    // 只有 DCQCN 需要记录 target_rate
+    if (m_cc_mode == 1) {  // DCQCN/MLX
+        uint64_t target_rate_bps = qp->mlx.m_targetRate.GetBitRate();
+        
+        // 写入速率变化信息到文件
+        // 格式：flow_id rate_bps target_rate_bps timestamp reason
+        fprintf(m_rateChangeFile, "%u %lu %lu %lu %s\n",
+                flow_id,                           // 流 ID
+                newRate.GetBitRate(),              // 当前速率（bps）
+                target_rate_bps,                   // 目标速率（bps）
+                Simulator::Now().GetTimeStep(),     // 时间戳
+                reason.c_str()                     // 变化原因
+        );
+    } else {
+        // 其他拥塞控制算法保持原格式
+        // 格式：flow_id rate_bps timestamp reason
+        fprintf(m_rateChangeFile, "%u %lu %lu %s\n",
+                flow_id,                           // 流 ID
+                newRate.GetBitRate(),              // 速率（bps）
+                Simulator::Now().GetTimeStep(),     // 时间戳
+                reason.c_str()                     // 变化原因
+        );
+    }
+    
+    fflush(m_rateChangeFile);
 }
 
 void RdmaHw::SetNode(Ptr<Node> node) { m_node = node; }
@@ -239,6 +286,7 @@ void RdmaHw::AddQueuePair(uint64_t size, uint16_t pg, Ipv4Address sip, Ipv4Addre
     if (m_SR) {
         qp->sr.m_enabled = m_SR;
         qp->sr.m_recovery = false;
+        qp->sr.m_recovery_index = 0;
     }
 
     // add qp
@@ -253,6 +301,9 @@ void RdmaHw::AddQueuePair(uint64_t size, uint16_t pg, Ipv4Address sip, Ipv4Addre
     //std::cout << "bps: " << m_bps << std::endl;
     qp->m_rate = m_bps;
     qp->m_max_rate = m_bps;
+
+    LogRateChange(qp, m_bps, "initial_rate");
+
     if (m_cc_mode == 1) {
         qp->mlx.m_targetRate = m_bps;
     } else if (m_cc_mode == 3) {
@@ -510,7 +561,7 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch) {
                 seqh.SetSrSize(payload_size);
             }else{
                 //drop return zero sack
-                seqh.SetSrSeq(0); 
+                seqh.SetSrSeq(ch.udp.seq); 
                 seqh.SetSrSize(0);
             }
         }
@@ -532,7 +583,15 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch) {
         head.SetDestination(Ipv4Address(ch.sip));
         head.SetSource(Ipv4Address(ch.dip));
         if (m_SR){
-            head.SetProtocol(0xFC);
+            if (x == 1){
+                head.SetProtocol(0xFD); // nack=0xFD
+            }
+            else if (x == 2){
+                head.SetProtocol(0xFC); // ack=0xFC
+            }
+            else{
+                assert(false && "Invalid x value in SR protocol");
+            }
         }else{
             head.SetProtocol(x == 1 ? 0xFC : 0xFD);  // ack=0xFC nack=0xFD
         }
@@ -633,7 +692,33 @@ int RdmaHw::ReceiveCnp(Ptr<Packet> p, CustomHeader &ch) {
     }
     return 0;
 }
+void RdmaHw::SR_HandleNackTimeout(Ptr<RdmaQueuePair> qp) {
+    if (qp->IsFinished()) {
+        return;
+    }
 
+    if (m_srLog) {
+        std::cout << "SR_HandleNackTimeout: node=" << m_node->GetId()
+                  << " flow=" << qp->m_flow_id
+                  << " snd_una=" << qp->snd_una
+                  << " snd_nxt=" << qp->snd_nxt
+                  << " recovery_before=" << (qp->sr.m_recovery ? "true" : "false")
+                  << " recovery_index=" << qp->sr.m_recovery_index
+                  << " forcing_exit_recovery_mode" << std::endl;
+    }
+
+    // 强制退出恢复模式
+    if (qp->sr.m_recovery) {
+        qp->sr.m_recovery = false;
+        
+        if (m_srLog) {
+            std::cout << "SR_HandleNackTimeout FORCE_EXIT_RECOVERY: node=" << m_node->GetId()
+                      << " flow=" << qp->m_flow_id
+                      << " recovery_after=" << (qp->sr.m_recovery ? "true" : "false")
+                      << " reason=nack_timeout_expired" << std::endl;
+        }
+    }
+}
 /******************************
  * SR-specific functions/vars
  *****************************/
@@ -659,70 +744,156 @@ int RdmaHw::SR_ReceiveACK(Ptr<Packet> p, CustomHeader &ch) {
             exit(1);    
         }
     }
+    uint32_t nic_idx = GetNicIdxOfQp(qp);
+    Ptr<QbbNetDevice> dev = m_nic[nic_idx].dev;
+    uint32_t old_snd_una = qp->snd_una;
+    uint32_t old_recovery_index = qp->sr.m_recovery_index;
+    bool old_recovery = qp->sr.m_recovery;
+
     // 记录接收前的状态
     if (m_srLog) {
         std::cout << "SR_ReceiveACK BEFORE: node=" << m_node->GetId() 
               << " flow=" << qp->m_flow_id
+              << " protocol=" << (ch.l3Prot == 0xFC ? "ACK" : "NACK")
               << " ack_seq=" << seq
               << " srNack=" << ch.ack.srNack 
               << " srNackSize=" << ch.ack.srNackSize
               << " snd_una=" << qp->snd_una 
               << " snd_nxt=" << qp->snd_nxt
+              << " m_recovery=" << qp->sr.m_recovery
+              << " m_recovery_index=" << qp->sr.m_recovery_index
               << " sack_blocks=" << qp->sr.m_sack.getSackBufferOverhead()
               << " sack_bitmap=" << qp->sr.m_sack
               << std::endl;
     }
-
-    uint32_t nic_idx = GetNicIdxOfQp(qp);
-    Ptr<QbbNetDevice> dev = m_nic[nic_idx].dev;
-    uint32_t old_snd_una = qp->snd_una;
-    qp->Acknowledge(seq); //update snd_una
-    if (ch.ack.srNackSize != 0) {
-        qp->sr.m_sack.sack(ch.ack.srNack, ch.ack.srNackSize);
-    }
-    uint32_t sack_seq, sack_len;
-    if (qp->sr.m_sack.peekFrontBlock(&sack_seq, &sack_len)) {
-        if (m_srLog) {
-            std::cout << "SR_ReceiveACK SACK_FRONT: node=" << m_node->GetId()
-                      << " flow=" << qp->m_flow_id
-                      << " SACK front_block_seq=" << sack_seq
-                      << " SACK front_block_len=" << sack_len
-                      << " current_snd_una=" << qp->snd_una
-                      << std::endl;
+    if (ch.l3Prot == 0xFC) { 
+        qp->Acknowledge(seq); //update snd_una
+        if (ch.ack.srNackSize != 0) {
+            qp->sr.m_sack.sack(ch.ack.srNack, ch.ack.srNackSize);
         }
-        if (qp->snd_una == sack_seq) {
-                qp->snd_una += sack_len;
+        uint32_t sack_seq, sack_len;
+        if (qp->sr.m_sack.peekFrontBlock(&sack_seq, &sack_len)) {
+            if (m_srLog) {
+                std::cout << "SR_ReceiveACK SACK_FRONT: node=" << m_node->GetId()
+                        << " flow=" << qp->m_flow_id
+                        << " SACK front_block_seq=" << sack_seq
+                        << " SACK front_block_len=" << sack_len
+                        << " current_snd_una=" << qp->snd_una
+                        << std::endl;
+            }
+            if (qp->snd_una == sack_seq) {
+                    qp->snd_una += sack_len;
+                    if (m_srLog) {
+                        std::cout << "SR_ReceiveACK SACK_ADVANCE: node=" << m_node->GetId()
+                                << " flow=" << qp->m_flow_id
+                                << " advanced_snd_una_to=" << qp->snd_una << std::endl;
+                    }
+                }
+        }
+        size_t discarded = qp->sr.m_sack.discardUpTo(qp->snd_una);
+        if (m_srLog && discarded > 0) {
+            std::cout << "SR_ReceiveACK SACK_DISCARD: node=" << m_node->GetId()
+                << " flow=" << qp->m_flow_id
+                << " discarded_blocks=" << discarded
+                << " up_to_seq=" << qp->snd_una << std::endl;
+        }
+        if (qp->snd_nxt < qp->snd_una) {
+            if (m_srLog) {
+                std::cout << "SR_ReceiveACK SND_NXT_ADJUST: node=" << m_node->GetId()
+                        << " flow=" << qp->m_flow_id
+                        << " old_snd_nxt=" << qp->snd_nxt
+                        << " new_snd_nxt=" << qp->snd_una << std::endl;
+            }
+            qp->snd_nxt = qp->snd_una;
+        }
+        if (qp->sr.m_recovery && qp->snd_una >= qp->sr.m_recovery_index) {
+            qp->sr.m_recovery = false;
+            if (m_srLog) {
+                std::cout << "SR_ReceiveACK RECOVERY_EXIT: node=" << m_node->GetId()
+                          << " flow=" << qp->m_flow_id
+                          << " snd_una=" << qp->snd_una
+                          << " recovery_index=" << qp->sr.m_recovery_index
+                          << " exiting_recovery_mode" << std::endl;
+            }
+        }
+    } else if (ch.l3Prot == 0xFD){
+        if (!qp->sr.m_recovery) {
+            qp->sr.m_recovery = true;
+            qp->sr.m_recovery_index = qp->snd_nxt;
+            if (qp->snd_nxt > ch.ack.srNack) {
+                qp->snd_nxt = ch.ack.srNack;
+            }
+            
+            if (m_srLog) {
+                std::cout << "SR_ReceiveNACK ENTER_RECOVERY: node=" << m_node->GetId()
+                          << " flow=" << qp->m_flow_id
+                          << " nack_seq=" << ch.ack.srNack
+                          << " nack_size=" << ch.ack.srNackSize
+                          << " snd_una=" << qp->snd_una
+                          << " snd_nxt=" << qp->snd_nxt
+                          << " recovery_index=" << qp->sr.m_recovery_index
+                          << " entering_recovery_mode" << std::endl;
+            }
+
+            // 进入 recovery 后重启 retransmit 计时器
+            if (!qp->IsFinished()) {
+                if (qp->m_retransmit.IsRunning()) qp->m_retransmit.Cancel();
+                qp->m_retransmit = Simulator::Schedule(m_SR_timeout, &RdmaHw::SR_HandleTimeout, this, qp, m_SR_timeout);
                 if (m_srLog) {
-                    std::cout << "SR_ReceiveACK SACK_ADVANCE: node=" << m_node->GetId()
+                    std::cout << "SR_ReceiveNACK RESTART_RETRANSMIT_TIMER: node=" << m_node->GetId()
                               << " flow=" << qp->m_flow_id
-                              << " advanced_snd_una_to=" << qp->snd_una << std::endl;
+                              << " scheduled for " << m_SR_timeout.GetMicroSeconds() << " us"
+                              << " reason=enter_recovery_mode"
+                              << " m_recovery=" << (qp->sr.m_recovery ? "true" : "false")
+                              << " m_recovery_index=" << qp->sr.m_recovery_index << std::endl;
                 }
             }
-    }
-    size_t discarded = qp->sr.m_sack.discardUpTo(qp->snd_una);
-    if (m_srLog && discarded > 0) {
-        std::cout << "SR_ReceiveACK SACK_DISCARD: node=" << m_node->GetId()
-              << " flow=" << qp->m_flow_id
-              << " discarded_blocks=" << discarded
-              << " up_to_seq=" << qp->snd_una << std::endl;
-    }
-    if (qp->snd_nxt < qp->snd_una) {
-        if (m_srLog) {
-            std::cout << "SR_ReceiveACK SND_NXT_ADJUST: node=" << m_node->GetId()
-                      << " flow=" << qp->m_flow_id
-                      << " old_snd_nxt=" << qp->snd_nxt
-                      << " new_snd_nxt=" << qp->snd_una << std::endl;
+        } else {
+            if (m_srLog) {
+                std::cout << "SR_ReceiveNACK ALREADY_IN_RECOVERY: node=" << m_node->GetId()
+                          << " flow=" << qp->m_flow_id
+                          << " nack_seq=" << ch.ack.srNack
+                          << " nack_size=" << ch.ack.srNackSize
+                          << " current_recovery_index=" << qp->sr.m_recovery_index
+                          << " ignoring_nack" << std::endl;
+            }
         }
-        qp->snd_nxt = qp->snd_una;
+        if (qp->sr.m_recovery) {
+            // 取消之前的 NACK 超时计时器
+            if (qp->sr.m_nackTimeout.IsRunning()) {
+                qp->sr.m_nackTimeout.Cancel();
+            }
+            
+            // 重新启动 NACK 超时计时器
+            qp->sr.m_nackTimeout = Simulator::Schedule(m_SR_nack_timeout, &RdmaHw::SR_HandleNackTimeout, this, qp);
+            
+            if (m_srLog) {
+                std::cout << "SR_ReceiveNACK REFRESH_NACK_TIMEOUT: node=" << m_node->GetId()
+                            << " flow=" << qp->m_flow_id
+                            << " nack_seq=" << ch.ack.srNack
+                            << " nack_size=" << ch.ack.srNackSize
+                            << " nack_timeout=" << m_SR_nack_timeout.GetMicroSeconds() << "us"
+                            << " current_recovery=" << (qp->sr.m_recovery ? "true" : "false")
+                            << " recovery_index=" << qp->sr.m_recovery_index << std::endl;
+            }
+        }
     }
+
+
+
 
     if (m_srLog) {
         std::cout << "SR_ReceiveACK AFTER: node=" << m_node->GetId()
                   << " flow=" << qp->m_flow_id
+                  << " protocol=" << (ch.l3Prot == 0xFC ? "ACK" : "NACK")
                   << " ack_seq=" << seq
                   << " old_snd_una=" << old_snd_una
                   << " new_snd_una=" << qp->snd_una
                   << " snd_nxt=" << qp->snd_nxt
+                  << " old_recovery=" << (old_recovery ? "true" : "false")
+                  << " new_recovery=" << (qp->sr.m_recovery ? "true" : "false")
+                  << " old_recovery_index=" << old_recovery_index
+                  << " new_recovery_index=" << qp->sr.m_recovery_index
                   << " sack_blocks=" << qp->sr.m_sack.getSackBufferOverhead()
                   << " sack_bitmap=" << qp->sr.m_sack
                   << " una_advancement=" << (qp->snd_una - old_snd_una)
@@ -748,7 +919,9 @@ int RdmaHw::SR_ReceiveACK(Ptr<Packet> p, CustomHeader &ch) {
     // handle cnp
     if (!qp->IsFinished() && cnp) {
         if (m_cc_mode == 1) {  // mlx version
-            cnp_received_mlx(qp);
+            if (m_ccEnabled){
+                cnp_received_mlx(qp);
+            }
         }
     }
     if (m_cc_mode == 3) {
@@ -876,7 +1049,9 @@ int RdmaHw::ReceiveAck(Ptr<Packet> p, CustomHeader &ch) {
     // handle cnp
     if (!qp->IsFinished() && cnp) {
         if (m_cc_mode == 1) {  // mlx version
-            cnp_received_mlx(qp);
+            if (m_ccEnabled){
+                cnp_received_mlx(qp);
+            }
         }
     }
 
@@ -912,7 +1087,10 @@ int RdmaHw::Receive(Ptr<Packet> p, CustomHeader &ch) {
     } else if (ch.l3Prot == 0xFF) {  // CNP
         return ReceiveCnp(p, ch);
     } else if (ch.l3Prot == 0xFD) {  // NACK
-        return ReceiveAck(p, ch);
+        if (m_SR)
+            return SR_ReceiveACK(p, ch);
+        else
+            return ReceiveAck(p, ch);
     } else if (ch.l3Prot == 0xFC) {  // ACK
         if (m_SR)
             return SR_ReceiveACK(p, ch);
@@ -1149,6 +1327,14 @@ void RdmaHw::QpComplete(Ptr<RdmaQueuePair> qp) {
         Simulator::Cancel(qp->mlx.m_rpTimer);
     }
     if (qp->m_retransmit.IsRunning()) qp->m_retransmit.Cancel();
+    if (qp->sr.m_enabled && qp->sr.m_nackTimeout.IsRunning()) {
+        qp->sr.m_nackTimeout.Cancel();
+        if (m_srLog) {
+            std::cout << "[QpComplete] CANCEL_NACK_TIMEOUT: node=" << m_node->GetId()
+                      << " flow=" << qp->m_flow_id
+                      << " reason=qp_complete" << std::endl;
+        }
+    }
 
     // This callback will log info. It also calls deletetion the rxQp on the receiver
     m_qpCompleteCallback(qp);
@@ -1209,18 +1395,20 @@ Ptr<Packet> RdmaHw::SR_GetNxtPacket(Ptr<RdmaQueuePair> qp){
     // 添加 SR 发包日志
     if (m_srLog) {
         std::cout << "SR_GetNxtPacket: node=" << m_node->GetId()
-              << " flow=" << qp->m_flow_id
-              << " snd_una=" << qp->snd_una
-              << " old_snd_nxt=" << old_snd_nxt
-              << " new_snd_nxt=" << qp->snd_nxt
-              << " packet_seq=" << seq
-              << " packet_size=" << payload_size
-              << " bytes_left=" << qp->GetBytesLeft()
-              << " sack_blocks=" << qp->sr.m_sack.getSackBufferOverhead()
-              << " sack_bitmap=" << qp->sr.m_sack
-              << " txTotalPkts=" << qp->stat.txTotalPkts
-              << " txDataBytes=" << qp->stat.txDataBytes
-              << std::endl;
+            << " flow=" << qp->m_flow_id
+            << " snd_una=" << qp->snd_una
+            << " old_snd_nxt=" << old_snd_nxt
+            << " new_snd_nxt=" << qp->snd_nxt
+            << " packet_seq=" << seq
+            << " packet_size=" << payload_size
+            << " bytes_left=" << qp->GetBytesLeft()
+            << " m_recovery=" << (qp->sr.m_recovery ? "true" : "false")
+            << " m_recovery_index=" << qp->sr.m_recovery_index
+            << " sack_blocks=" << qp->sr.m_sack.getSackBufferOverhead()
+            << " sack_bitmap=" << qp->sr.m_sack
+            << " txTotalPkts=" << qp->stat.txTotalPkts
+            << " txDataBytes=" << qp->stat.txDataBytes
+            << std::endl;
     }
     
     Ptr<Packet> p = Create<Packet>(payload_size);
@@ -1377,16 +1565,16 @@ void RdmaHw::PktSent(Ptr<RdmaQueuePair> qp, Ptr<Packet> pkt, Time interframeGap)
                     qp->m_retransmit = Simulator::Schedule(qp->GetRto(m_mtu), &RdmaHw::HandleTimeout, this,
                                                     qp, qp->GetRto(m_mtu));
                 }
-                if (qp->sr.m_recovery){
-                    if (qp->m_retransmit.IsRunning()){
-                        if (m_srLog) {
-                            std::cout << "SR retransmit timer Restart for retransmit packets: IsRunning=" << qp->m_retransmit.IsRunning() << ", m_recovery=" << qp->sr.m_recovery << std::endl;
-                        }
-                        qp->m_retransmit.Cancel();
-                    }
-                    qp->m_retransmit = Simulator::Schedule(qp->GetRto(m_mtu), &RdmaHw::HandleTimeout, this, qp, qp->GetRto(m_mtu));
-                    qp->sr.m_recovery = false;
-                }
+                // if (qp->sr.m_recovery){
+                //     if (qp->m_retransmit.IsRunning()){
+                //         if (m_srLog) {
+                //             std::cout << "SR retransmit timer Restart for retransmit packets: IsRunning=" << qp->m_retransmit.IsRunning() << ", m_recovery=" << qp->sr.m_recovery << std::endl;
+                //         }
+                //         qp->m_retransmit.Cancel();
+                //     }
+                //     qp->m_retransmit = Simulator::Schedule(qp->GetRto(m_mtu), &RdmaHw::HandleTimeout, this, qp, qp->GetRto(m_mtu));
+                //     qp->sr.m_recovery = false;
+                // }
             }else{
                 // Update Timer
                 if (qp->m_retransmit.IsRunning()) qp->m_retransmit.Cancel();
@@ -1442,6 +1630,23 @@ void RdmaHw::SR_HandleTimeout(Ptr<RdmaQueuePair> qp, Time rto) {
     uint32_t nic_idx = GetNicIdxOfQp(qp);
     Ptr<QbbNetDevice> dev = m_nic[nic_idx].dev;
     qp->sr.m_recovery = true;
+    qp->sr.m_recovery_index = old_snd_nxt;
+
+    if (!qp->IsFinished()) {
+            if (qp->m_retransmit.IsRunning()) qp->m_retransmit.Cancel();
+            qp->m_retransmit = Simulator::Schedule(m_SR_timeout, &RdmaHw::SR_HandleTimeout, this, qp, m_SR_timeout);
+            if (m_srLog) {
+                std::cout << "SR_ReceiveACK restart RETRANSMIT_TIMER with timeout: node=" << m_node->GetId()
+                          << " flow=" << qp->m_flow_id
+                          << " scheduled for " << m_SR_timeout.GetMicroSeconds() << " us"
+                          << " old_snd_una=" << old_snd_una
+                          << " snd_una=" << qp->snd_una
+                          << " snd_nxt=" << qp->snd_nxt << std::endl
+                          << " m_recovery=" << (qp->sr.m_recovery ? "true" : "false")
+                          << " m_recovery_index=" << qp->sr.m_recovery_index;
+            }
+    }
+    
     dev->TriggerTransmit();
 }
 
@@ -1496,6 +1701,9 @@ void RdmaHw::ChangeRate(Ptr<RdmaQueuePair> qp, DataRate new_rate) {
 
     // change to new rate
     qp->m_rate = new_rate;
+
+    // 只有当速率真正发生变化时才记录
+    LogRateChange(qp, new_rate, "rate_control");
 }
 
 #define PRINT_LOG 0
@@ -1535,6 +1743,7 @@ void RdmaHw::cnp_received_mlx(Ptr<RdmaQueuePair> q) {
         ScheduleDecreaseRateMlx(q, 1);  // add 1 ns to make sure rate decrease is after alpha update
         // set rate on first CNP
         q->mlx.m_targetRate = q->m_rate = m_rateOnFirstCNP * q->m_rate;
+        LogRateChange(q, q->mlx.m_targetRate, "first_cnp");
         //std::cout << "ID: " << m_node->GetId() <<  ",First cnp target rate:" << q->mlx.m_targetRate << ",at" << Simulator::Now() << std::endl;
         q->mlx.m_first_cnp = false;
     }
@@ -1551,10 +1760,15 @@ void RdmaHw::CheckRateDecreaseMlx(Ptr<RdmaQueuePair> q) {
         if (!m_EcnClampTgtRate) {
             if (q->mlx.m_rpTimeStage == 0) clamp = false;
         }
+        //TODO:这里将clamp尝试完全关闭试试：
+        // clamp = false; 
         if (clamp) {
             q->mlx.m_targetRate = q->m_rate;
         }
         q->m_rate = std::max(m_minRate, q->m_rate * (1 - q->mlx.m_alpha / 2));
+        // if (old_rate.GetBitRate() != q->m_rate.GetBitRate()) {
+        LogRateChange(q, q->m_rate, "cnp_decrease");
+        // }
         // reset rate increase related things
         q->mlx.m_rpTimeStage = 0;
         q->mlx.m_decrease_cnp_arrived = false;
@@ -1600,6 +1814,7 @@ void RdmaHw::FastRecoveryMlx(Ptr<RdmaQueuePair> q) {
 
     q->m_rate = (q->m_rate / 2) + (q->mlx.m_targetRate / 2);
 
+    LogRateChange(q, q->m_rate, "fast_recovery");
     //printf("(%.3lf %.3lf)\n", q->mlx.m_targetRate.GetBitRate() * 1e-9,
     //       q->m_rate.GetBitRate() * 1e-9);
 
@@ -1618,6 +1833,7 @@ void RdmaHw::ActiveIncreaseMlx(Ptr<RdmaQueuePair> q) {
     if (q->mlx.m_targetRate > dev->GetDataRate()) q->mlx.m_targetRate = dev->GetDataRate();
     // std::cout << "ID: " << m_node->GetId() << ",Dev_getdatarate " << dev->GetDataRate() << ",at" << Simulator::Now() << std::endl;
     q->m_rate = (q->m_rate / 2) + (q->mlx.m_targetRate / 2);
+    LogRateChange(q, q->m_rate, "active_increase");
 #if PRINT_LOG
     printf("(%.3lf %.3lf)\n", q->mlx.m_targetRate.GetBitRate() * 1e-9,
            q->m_rate.GetBitRate() * 1e-9);
@@ -1636,6 +1852,7 @@ void RdmaHw::HyperIncreaseMlx(Ptr<RdmaQueuePair> q) {
     q->mlx.m_targetRate += m_rhai;
     if (q->mlx.m_targetRate > dev->GetDataRate()) q->mlx.m_targetRate = dev->GetDataRate();
     q->m_rate = (q->m_rate / 2) + (q->mlx.m_targetRate / 2);
+    LogRateChange(q, q->m_rate, "hyper_increase");
 #if PRINT_LOG
     printf("(%.3lf %.3lf)\n", q->mlx.m_targetRate.GetBitRate() * 1e-9,
            q->m_rate.GetBitRate() * 1e-9);

@@ -199,6 +199,7 @@ class RdmaHw : public Object {
     bool m_SR;
     uint32_t m_SR_window;
     Time m_SR_timeout; // MicroSeconds(200)
+    Time m_SR_nack_timeout;     // 新增：NACK 超时时间
     bool m_srLog; // enable SR receiver logs
 
     static FILE* m_qpStatFile;          // QP 统计文件指针
@@ -208,7 +209,16 @@ class RdmaHw : public Object {
         m_qpStatEnabled = (file != nullptr); 
     }
     void LogQpStats(Ptr<RdmaQueuePair> qp);  // 记录 QP 统计信息
-
+    void SR_HandleNackTimeout(Ptr<RdmaQueuePair> qp);
+    static FILE* m_rateChangeFile; 
+    static bool m_rateChangeEnabled;
+    static void SetRateChangeFile(FILE* file) { 
+        m_rateChangeFile = file; 
+        m_rateChangeEnabled = (file != nullptr); 
+    }
+    void LogRateChange(Ptr<RdmaQueuePair> qp, DataRate newRate, const std::string& reason);  // 记录速率变化事件
+    
+    bool m_ccEnabled; 
 };
 
 } /* namespace ns3 */

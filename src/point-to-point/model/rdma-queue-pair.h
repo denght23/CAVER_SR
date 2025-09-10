@@ -138,6 +138,8 @@ class RdmaQueuePair : public Object {
         bool m_enabled;
         IrnSackManager m_sack;
         bool m_recovery;
+        uint32_t m_recovery_index;
+        EventId m_nackTimeout;
     } sr;
 
 

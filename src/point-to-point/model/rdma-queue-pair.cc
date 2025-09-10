@@ -78,6 +78,9 @@ RdmaQueuePair::RdmaQueuePair(uint16_t pg, Ipv4Address _sip, Ipv4Address _dip, ui
      *****************************/
     sr.m_enabled = false; 
     sr.m_recovery = false;
+    sr.m_recovery_index = 0;
+    sr.m_nackTimeout = EventId();
+
 
     m_timeout = MilliSeconds(4);
 }

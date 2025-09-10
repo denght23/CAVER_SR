@@ -21,6 +21,8 @@
 
 namespace ns3 {
 
+FILE* SwitchNode::m_pfcRecordFile = nullptr;
+
 TypeId SwitchNode::GetTypeId(void) {
     static TypeId tid =
         TypeId("ns3::SwitchNode")
@@ -81,6 +83,8 @@ SwitchNode::SwitchNode() {
     m_mmu->m_caverRouting.SetSwitchSendCallback(MakeCallback(&SwitchNode::DoSwitchSend, this));
     m_mmu->m_caverRouting.SetSwitchSendToDevCallback(
         MakeCallback(&SwitchNode::SendToDevContinue, this));
+    m_mmu->m_caverRouting.SetGetPortQueueLengthCallback(
+    MakeCallback(&SwitchNode::GetPortTotalQueueLength, this));
         //Noshare's Callback for switch functions
     m_mmu->m_noshareRouting.SetSwitchSendCallback(MakeCallback(&SwitchNode::DoSwitchSend, this));
     m_mmu->m_noshareRouting.SetSwitchSendToDevCallback(
@@ -133,7 +137,68 @@ uint32_t SwitchNode::DoLbDV(Ptr<Packet> p, CustomHeader &ch, const std::vector<i
     return DoLbFlowECMP(p, ch, nexthops);  // flow ECMP (dummy)
 }
 /*-----------------Caver-----------------*/
-uint32_t SwitchNode::DoLbCaver(Ptr<Packet> p, CustomHeader &ch, const std::vector<int> &nexthops) {
+uint32_t SwitchNode::DoLbCaverFlow(Ptr<Packet> p, CustomHeader &ch, const std::vector<int> &nexthops) {
+    if (reorder_log && ch.l3Prot == 0x11) {
+        std::cout << "[DoLbCaverFlow] switch_id=" << m_id
+                  << " using_ECMP" << std::endl;
+        return DoLbFlowECMP(p, ch, nexthops);  // flow ECMP (dummy)
+    }   else if (ch.l3Prot == 0xFC || ch.l3Prot == 0xFD) {
+        if (reorder_log) {
+            std::cout << "[DoLbCaverFlow] switch_id=" << m_id
+                      << " ack_route=" << m_mmu->m_caverRouting.ack_route << std::endl;
+        }
+        if (m_mmu->m_caverRouting.ack_route == 0) {
+            if (reorder_log) std::cout << "[DoLbCaverPacket] using_ECMP" << std::endl;
+            return DoLbFlowECMP(p, ch, nexthops);
+        } else if (m_mmu->m_caverRouting.ack_route == 1) {
+            if (reorder_log) std::cout << "[DoLbCaverPacket] using_Greedy" << std::endl;
+            return DoLbGreedy(p, ch, nexthops);
+        } else if (m_mmu->m_caverRouting.ack_route == 2) {
+            if (reorder_log) std::cout << "[DoLbCaverPacket] using_Oblivious" << std::endl;
+            return DoLbOblivious(p, ch, nexthops);
+        }
+    }
+    return DoLbFlowECMP(p, ch, nexthops);  // flow ECMP (dummy)
+}
+
+uint32_t SwitchNode::DoLbCaverPacket(Ptr<Packet> p, CustomHeader &ch, const std::vector<int> &nexthops) {
+    uint32_t flow_id = 0;
+    if (ch.l3Prot == 0x11) {
+        if (reorder_log) {
+            std::cout << "[DoLbCaverPacket] switch_id=" << m_id
+                      << " data_backup_route=" << m_mmu->m_caverRouting.data_backup_route << std::endl;
+        }
+        if (m_mmu->m_caverRouting.data_backup_route == 0) {
+            if (reorder_log) std::cout << "[DoLbCaverPacket] using_ECMP" << std::endl;
+            return DoLbFlowECMP(p, ch, nexthops);
+        } else if (m_mmu->m_caverRouting.data_backup_route == 1) {
+            if (reorder_log) std::cout << "[DoLbCaverPacket] using_Greedy" << std::endl;
+            return DoLbGreedy(p, ch, nexthops);
+        } else if (m_mmu->m_caverRouting.data_backup_route == 2) {
+            if (reorder_log) std::cout << "[DoLbCaverPacket] using_Oblivious" << std::endl;
+            return DoLbOblivious(p, ch, nexthops);
+        }
+    } else if (ch.l3Prot == 0xFC || ch.l3Prot == 0xFD) {
+        if (reorder_log) {
+            std::cout << "[DoLbCaverPacket] switch_id=" << m_id
+                      << " ack_route=" << m_mmu->m_caverRouting.ack_route << std::endl;
+        }
+        if (m_mmu->m_caverRouting.ack_route == 0) {
+            if (reorder_log) std::cout << "[DoLbCaverPacket] using_ECMP" << std::endl;
+            return DoLbFlowECMP(p, ch, nexthops);
+        } else if (m_mmu->m_caverRouting.ack_route == 1) {
+            if (reorder_log) std::cout << "[DoLbCaverPacket] using_Greedy" << std::endl;
+            return DoLbGreedy(p, ch, nexthops);
+        } else if (m_mmu->m_caverRouting.ack_route == 2) {
+            if (reorder_log) std::cout << "[DoLbCaverPacket] using_Oblivious" << std::endl;
+            return DoLbOblivious(p, ch, nexthops);
+        }
+    }
+    if (reorder_log) {
+        std::cout << "[DoLbCaverPacket] switch_id=" << m_id
+                  << " flow_id=" << flow_id
+                  << " fallback_to_ECMP" << std::endl;
+    }
     return DoLbFlowECMP(p, ch, nexthops);  // flow ECMP (dummy)
 }
 /*-----------------Noshare-----------------*/
@@ -316,6 +381,11 @@ void SwitchNode::CheckAndSendPfc(uint32_t inDev, uint32_t qIndex){
     if (m_mmu->CheckShouldPause(inDev, qIndex)){
         device->SendPfc(qIndex, 0);
         m_mmu->SetPause(inDev, qIndex);
+
+        uint32_t peer_node_id = Settings::m_nodeInterfaceMap[GetId()][inDev];
+
+        LogPfcEvent(peer_node_id, qIndex, 1, "pause_threshold_exceeded");
+
         if (m_mmu->m_mmuLog) {
             std::cout << "[MMU-PFC-SEND] time=" << Simulator::Now().GetMicroSeconds()
                       << "us node=" << GetId()
@@ -337,6 +407,12 @@ void SwitchNode::CheckAndSendResume(uint32_t inDev, uint32_t qIndex){
     if (m_mmu->CheckShouldResume(inDev, qIndex)){
         device->SendPfc(qIndex, 1);
         m_mmu->SetResume(inDev, qIndex);
+
+        uint32_t peer_node_id = Settings::m_nodeInterfaceMap[GetId()][inDev];
+        
+        // 记录 PFC 恢复事件
+        LogPfcEvent(peer_node_id, qIndex, 0, "resume_threshold_reached");
+
         if (m_mmu->m_mmuLog) {
             std::cout << "[MMU-PFC-SEND] time=" << Simulator::Now().GetMicroSeconds()
                       << "us node=" << GetId()
@@ -435,6 +511,7 @@ void SwitchNode::SendToDev(Ptr<Packet> p, CustomHeader &ch) {
                   << " packet_lb_mode=" << Settings::packet_lb_mode << std::endl;
     }
 
+
     if (!flow_reorderable){
         if (reorder_log && ch.l3Prot == 0x11) {
             std::cout << "[SendToDev-NON_REORDERABLE_ROUTING] switch_id=" << m_id 
@@ -459,10 +536,9 @@ void SwitchNode::SendToDev(Ptr<Packet> p, CustomHeader &ch) {
         }
 
         if(Settings::lb_mode == 20){
-            if (reorder_log && ch.l3Prot == 0x11) {
+            if (reorder_log) {
                 std::cout << "[SendToDev-HIJACK_CAVER] switch_id=" << m_id 
-                          << " flow_id=" << flow_id 
-                          << " entering_caver_routing" << std::endl;
+                          << " entering_caver_routing: ch: " << ch.l3Prot <<std::endl;
             }
             m_mmu->m_caverRouting.RouteInput(p, ch);
             return;
@@ -492,9 +568,8 @@ void SwitchNode::SendToDev(Ptr<Packet> p, CustomHeader &ch) {
                       << " checking_packet_level_routing..." << std::endl;
         }
         if(Settings::packet_lb_mode == 20){
-            if (reorder_log && ch.l3Prot == 0x11) {
+            if (reorder_log) {
                 std::cout << "[SendToDev-HIJACK_PACKET_CAVER] switch_id=" << m_id 
-                          << " flow_id=" << flow_id 
                           << " entering_packet_caver_routing" << std::endl;
             }
             m_mmu->m_caverRouting.RouteInput(p, ch);
@@ -660,9 +735,32 @@ int SwitchNode::GetStaticRoute(Ptr<Packet> p, CustomHeader &ch){
 }
 
 int SwitchNode::GetOutDev(Ptr<Packet> p, CustomHeader &ch) {
+    if (reorder_log){
+        std::string l3ProtStr;
+        if (ch.l3Prot == 0x11) {
+            l3ProtStr = "UDP(0x11)";
+        } else if (ch.l3Prot == 0xFC) {
+            l3ProtStr = "ACK(0xFC)";
+        } else if (ch.l3Prot == 0xFD) {
+            l3ProtStr = "NACK(0xFD)";
+        } else {
+            std::ostringstream oss;
+            oss << "OTHER(0x" << std::hex << (int)ch.l3Prot << ")";
+            l3ProtStr = oss.str();
+        }
+        std::cout << "[GetOutDev-L3PROT] switch_id=" << m_id
+                  << " l3Prot=" << l3ProtStr << std::endl;
+    }
     uint32_t flow_id = 0;
 
-    std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(ch.sip, ch.dip, ch.udp.sport, ch.udp.dport);
+    std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key;
+    if (ch.l3Prot == 0xFC || ch.l3Prot == 0xFD) { // ACK or NACK
+        // 对于ACK/NACK包，源和目的需要互换
+        flow_key = std::make_tuple(ch.dip, ch.sip, ch.udp.dport, ch.udp.sport);
+    } else {
+        // 普通数据包
+        flow_key = std::make_tuple(ch.sip, ch.dip, ch.udp.sport, ch.udp.dport);
+    }
     auto it = Settings::reorderable.find(flow_key);
     bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
 
@@ -702,7 +800,9 @@ int SwitchNode::GetOutDev(Ptr<Packet> p, CustomHeader &ch) {
                       << " lb_mode=" << Settings::lb_mode << std::endl;
         }
         if (Settings::lb_mode == 0 || control_pkt) {  // control packet (ACK, NACK, PFC, QCN)
-            return DoLbFlowECMP(p, ch, nexthops);     // ECMP routing path decision (4-tuple)
+            if (Settings::lb_mode != 20) {
+                return DoLbFlowECMP(p, ch, nexthops);     // ECMP routing path decision (4-tuple)
+            }
         }
         switch (Settings::lb_mode) {
             case 2:
@@ -720,7 +820,7 @@ int SwitchNode::GetOutDev(Ptr<Packet> p, CustomHeader &ch) {
                     std::cout << "[GetOutDev-CAVER] switch_id=" << m_id 
                               << " flow_id=" << flow_id << std::endl;
                 }
-                return DoLbCaver(p, ch, nexthops); /** DUMMY: Do ECMP */
+                return DoLbCaverFlow(p, ch, nexthops); /** DUMMY: Do ECMP */
             case 21:
                 return DoLbNoshare(p, ch, nexthops); /** DUMMY: Do ECMP */
             case 12:
@@ -736,13 +836,8 @@ int SwitchNode::GetOutDev(Ptr<Packet> p, CustomHeader &ch) {
                       << " flow_id=" << flow_id 
                       << " packet_lb_mode=" << Settings::packet_lb_mode << std::endl;
         }
-        if (Settings::packet_lb_mode == 0 || control_pkt) {  // control packet (ACK, NACK, PFC, QCN)
-            if (reorder_log && ch.l3Prot == 0x11) {
-                std::cout << "[GetOutDev-PACKET_ECMP] switch_id=" << m_id 
-                          << " flow_id=" << flow_id 
-                          << " reason=" << (control_pkt ? "control_pkt" : "packet_lb_mode_0") << std::endl;
-            }
-            return DoLbFlowECMP(p, ch, nexthops);     // ECMP routing path decision (4-tuple)
+        if (Settings::packet_lb_mode == 0) {  // control packet (ACK, NACK, PFC, QCN)
+            if (Settings::packet_lb_mode != 20 ) return DoLbFlowECMP(p, ch, nexthops);     // ECMP routing path decision (4-tuple)
         }
         switch (Settings::packet_lb_mode){
             case 2:
@@ -760,12 +855,12 @@ int SwitchNode::GetOutDev(Ptr<Packet> p, CustomHeader &ch) {
                 }
                 return DoLbOblivious(p, ch, nexthops); /** New Oblivious LB */
             }
-                case 20:
+            case 20:
                 if (reorder_log && ch.l3Prot == 0x11) {
                     std::cout << "[GetOutDev-PACKET_GREEDY20] switch_id=" << m_id 
                               << " flow_id=" << flow_id << std::endl;
                 }
-                return DoLbGreedy(p, ch, nexthops); /** DUMMY: Do ECMP */
+                return DoLbCaverPacket(p, ch, nexthops); /** DUMMY: Do ECMP */
             default:
                 std::cout << "Unknown packet_lb_mode(" << Settings::packet_lb_mode << ")" << std::endl;
                 assert(false);
@@ -1032,6 +1127,18 @@ void SwitchNode::AddPathChoiceTableEntry(Ipv4Address &dstAddr, Time now){
         m_mmu->m_caverRouting.PathChoiceFlagMap[dip] = 0;
     }
 }
+void SwitchNode::AddPerHopCaverTableEntry(uint32_t host_id, const std::vector<uint32_t>& ports) {
+    // 初始化per-hop caver表项
+    m_mmu->m_caverRouting.InitPerHopCaverTable(host_id, ports);
+    
+    if (m_mmu->m_caverRouting.Route_log) {
+        std::cout << "Initialized per-hop caver table for Switch " << GetId() 
+                  << ", Host " << host_id << " with " << ports.size() << " ports" << std::endl;
+    }
+    // std::cout <<"check here" << std::endl;
+    // fflush(stdout);
+}
+
 void SwitchNode::AddPathChoiceTableEntry_noshare(Ipv4Address &dstAddr, Time now){
     Time t1 = Seconds (0.0);
     uint32_t dip = dstAddr.Get();
@@ -1165,6 +1272,30 @@ void SwitchNode::DoDispose(){
         m_GlobaldreEvent.Cancel();
     }
 }
+// 实现 LogPfcEvent 函数
+void SwitchNode::LogPfcEvent(uint32_t receiverNodeId, uint32_t qIndex, uint32_t type, const std::string& reason) {
+    if (!m_pfcRecordEnabled || m_pfcRecordFile == nullptr) {
+        return;
+    }
+
+    // 写入 PFC 事件信息到文件
+    // 格式：timestamp sender_node receiver_node qIndex type reason
+    fprintf(m_pfcRecordFile, "%lu %u %u %u %u %s\n",
+            Simulator::Now().GetTimeStep(),     // 时间戳
+            GetId(),                           // 发送节点 ID
+            receiverNodeId,                    // 接收节点 ID
+            qIndex,                           // 队列索引
+            type,                             // PFC 类型（1=PAUSE, 0=RESUME）
+            reason.c_str()                    // 触发原因
+    );
+    
+    fflush(m_pfcRecordFile);
+}
+// 在 SwitchNode 类中添加
+uint32_t SwitchNode::GetPortTotalQueueLength(uint32_t port) {
+    return m_mmu->egress_bytes[port][3];
+}
+
 
 uint64_t SwitchNode::GetQpKey(uint32_t dip, uint16_t sport, uint16_t dport, uint16_t pg) {
     return ((uint64_t)dip << 32) | ((uint64_t)sport << 16) | (uint64_t)pg | (uint64_t)dport;
