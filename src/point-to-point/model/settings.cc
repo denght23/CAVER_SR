@@ -63,6 +63,9 @@ std::map<uint32_t, Time> Settings::Dre_time_map;
 uint32_t Settings::caver_quantizeBit;
 double Settings::caver_alpha;
 
+
+std::vector<m_FlowInput> Settings::flow_info;
+
 // 重排内容 by zyf
 std::unordered_map<std::tuple<uint32_t, uint32_t, uint16_t, uint16_t>, bool, Settings::tuple_hash> Settings::reorderable;
 

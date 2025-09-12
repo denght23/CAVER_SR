@@ -30,6 +30,7 @@ PFC_OUTPUT_FILE mix/output/{id}/{id}_out_pfc.txt
 QP_STAT_OUTPUT_FILE mix/output/{id}/{id}_out_qp_stat.txt
 PFC_RECORD_OUTPUT_FILE mix/output/{id}/{id}_out_pfc_record.txt
 RATE_CHANGE_OUTPUT_FILE mix/output/{id}/{id}_out_rate_change.txt
+LINK_MONITOR_FILE mix/output/{id}/{id}_out_link_monitor.txt
 
 QLEN_MON_FILE mix/output/{id}/{id}_out_qlen.txt
 VOQ_MON_FILE mix/output/{id}/{id}_out_voq.txt
@@ -85,6 +86,7 @@ CAVER_PER_HOST_ROUTING_SCHEME {per_host_routing_scheme}
 CAVER_METRIC_CHOICE {metric_choice}
 CAVER_DATA_BACKUP_ROUTE {data_backup_route}
 CAVER_ACK_ROUTE {ack_route}
+CAVER_PERHOP_PATH_SELECT {perHop_path_select}
 
 ALPHA_RESUME_INTERVAL 1
 RATE_DECREASE_INTERVAL 4
@@ -166,6 +168,7 @@ topo2bdp = {
     "leaf_spine_128_100G_OS2": 104000,  # 2-tier -> all 100Gbps
     "fat_k4_100G_OS2": 156000,  # 3-tier -> all 100Gbps
     "fat_k4_100G_OS1": 156000,
+    "ununiform_fat_k8_100G_OS2": 156000,
     "fat_k8_100G_OS2": 156000,  # 3-tier -> all 100Gbps
     "fat_k8_100G_OS1": 156000,
     "fat_k16_100G_OS1": 156000,
@@ -269,11 +272,13 @@ def main():
     parser.add_argument('--per_host_routing_scheme', dest='per_host_routing_scheme', action='store',
                     type=int, default=1, help="per-host routing scheme: 0=like caver, 1=per-host dynamic (default: 1)")
     parser.add_argument('--metric_choice', dest='metric_choice', action='store',
-                type=int, default=1, help="metric choice: 0=ce, 1=queue (default: 1)")
+                type=int, default=0, help="metric choice: 0=ce, 1=queue (default: 0)")
     parser.add_argument('--data_backup_route', dest='data_backup_route', action='store',
             type=int, default=1, help="data backup route choice: 0: ECMP, 1: greedy, 2: oblivious")
     parser.add_argument('--ack_route', dest='ack_route', action='store',
             type=int, default=2, help="ack route choice: 0: ECMP, 1: greedy, 2: oblivious (default: 2)")
+    parser.add_argument('--perHop_path_select', dest='perHop_path_select', action='store',
+            type=int, default=2, help="enable per-hop path select: 0=disable, 1=enable (default: 2)")
 
     args = parser.parse_args()
 
@@ -329,6 +334,7 @@ def main():
     metric_choice = int(args.metric_choice)
     data_backup_route = int(args.data_backup_route)
     ack_route = int(args.ack_route)
+    perHop_path_select = int(args.perHop_path_select)
 
     # get over-subscription ratio from topoogy name
 
@@ -491,12 +497,12 @@ def main():
     print("1BDP = {}".format(bdp))
 
     # DCQCN parameters (NOTE: HPCC's 400KB/1600KB is too large, although used in Microsoft)
-    kmax_map = "6 %d %d %d %d %d %d %d %d %d %d %d %d" % (
-        bw*200000000, 400, bw*500000000, 400, bw*1000000000, 400, bw*2*1000000000, 400, bw*2500000000, 400, bw*4*1000000000, 400)
-    kmin_map = "6 %d %d %d %d %d %d %d %d %d %d %d %d" % (
-        bw*200000000, 100, bw*500000000, 100, bw*1000000000, 100, bw*2*1000000000, 100, bw*2500000000, 100, bw*4*1000000000, 100)
-    pmax_map = "6 %d %d %d %d %d %.2f %d %.2f %d %.2f %d %.2f" % (
-        bw*200000000, 0.2, bw*500000000, 0.2, bw*1000000000, 0.2, bw*2*1000000000, 0.2, bw*2500000000, 0.2, bw*4*1000000000, 0.2)
+    kmax_map = "7 %d %d %d %d %d %d %d %d %d %d %d %d %d %d" % (
+        bw*100000000, 400, bw*200000000, 400, bw*500000000, 400, bw*1000000000, 400, bw*2*1000000000, 400, bw*2500000000, 400, bw*4*1000000000, 400)
+    kmin_map = "7 %d %d %d %d %d %d %d %d %d %d %d %d %d %d" % (
+        bw*100000000, 100, bw*200000000, 100, bw*500000000, 100, bw*1000000000, 100, bw*2*1000000000, 100, bw*2500000000, 100, bw*4*1000000000, 100)
+    pmax_map = "7 %d %d %d %d %d %d %d %.2f %d %.2f %d %.2f %d %.2f" % (
+        bw*100000000, 0.2, bw*200000000, 0.2, bw*500000000, 0.2, bw*1000000000, 0.2, bw*2*1000000000, 0.2, bw*2500000000, 0.2, bw*4*1000000000, 0.2)
 
     # queue monitoring
     qlen_mon_start = flowgen_start_time
@@ -520,7 +526,7 @@ def main():
                                         enabled_pfc=enabled_pfc, enabled_irn=enabled_irn, enable_sr=enabled_sr,
                                         sr_timeout=sr_timeout, sr_window=sr_window,sr_host_file=sr_host_file if sr_host_file != '' else ("config/" + flow + "_SR_host.txt"),
                                         cc_mode=cc_mode,cc_enabled = cc_enabled, metric_choice=metric_choice, 
-                                        data_backup_route=data_backup_route, ack_route=ack_route, 
+                                        data_backup_route=data_backup_route, ack_route=ack_route, perHop_path_select=perHop_path_select, 
                                         per_host_routing=per_host_routing, per_host_routing_scheme=per_host_routing_scheme,  # 新增参数
                                         ai=ai, hai=hai, dctcp_ai=dctcp_ai,
                                         has_win=has_win, var_win=var_win,

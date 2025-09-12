@@ -110,6 +110,7 @@ uint32_t caver_per_host_routing_scheme = 1; // 新增
 uint32_t caver_metric_choice = 1; 
 uint32_t caver_data_backup_route = 1;       // 新增
 uint32_t caver_ack_route = 2;  
+uint32_t caver_perHop_path_select = 1;
 bool init_log = false;
 bool global_ce_log = false;
 uint32_t global_ce_mon_interval = 20; //us
@@ -175,6 +176,7 @@ FILE *ideal_ce = NULL;
 FILE *qp_stat_output = NULL;
 FILE *pfc_record_output = NULL;
 FILE *rate_change_output = NULL;
+FILE *link_monitor_output = NULL;
 
 std::string data_rate, link_delay, topology_file, flow_file;
 std::string flow_input_file = "flow.txt";
@@ -199,7 +201,9 @@ std::string m_packetHeaderFile = "pakcet_header.txt";
 std::string qp_stat_output_file = "qp_stat.txt";
 std::string pfc_record_output_file = "pfc_record.txt";
 std::string rate_change_output_file = "rate_change.txt";
+std::string link_monitor_file = "link_monitor.txt";
 
+Time link_monitor_interval = MicroSeconds(50);  // ns
 std::string sr_host_file;
 std::unordered_map<uint32_t, int> SR_host_dict;
 
@@ -379,6 +383,85 @@ void ReadFlowInput() {
     }
 }
 
+void check_link_states() {
+    if (!link_monitor_output) return;
+    
+    int empty_queue_count = 0;
+    double avg_utilization = 0;
+    int total_queue_count = 0;
+    uint64_t total_queue_len = 0;
+    
+    uint64_t now = Simulator::Now().GetNanoSeconds();
+    fprintf(link_monitor_output, "\nLink state at %lu: ", now);
+    
+    for (const auto& src_pair : nbr2if) {
+        Ptr<Node> src = src_pair.first;
+        Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(src);
+        if (src->GetNodeType() == 0) {  // 跳过服务器节点
+            continue;
+        }
+        
+        fprintf(link_monitor_output, "\nSrc:%u", src->GetId());
+        
+        for (const auto& dst_pair : src_pair.second) {
+            Ptr<Node> dst = dst_pair.first;
+            const Interface& iface = dst_pair.second;
+            
+            if (dst->GetNodeType() == 0) {  // 跳过服务器节点
+                continue;
+            }
+            
+            // 获取网络设备和队列长度
+            Ptr<QbbNetDevice> dev = DynamicCast<QbbNetDevice>(src->GetDevice(iface.idx));
+            if (!dev) continue;
+            
+            // uint32_t qlen = dev->GetQueue()->GetNBytesTotal();
+            uint32_t port = iface.idx;
+            uint32_t qlen = sw->m_mmu->egress_bytes[port][3];
+            
+            // 使用CAVER的m_DreMap和QuantizingX计算利用率
+            // double utilization = 0.0;
+            // uint32_t dre_value = sw->m_mmu->m_caverRouting.m_DreMap[port];
+            // uint32_t quantized_ce = sw->m_mmu->m_caverRouting.QuantizingX(port, dre_value);
+            // utilization = (double)quantized_ce / 255.0;
+
+            uint64_t sentBytes = dev->totalBytesSent;
+            dev->totalBytesSent = 0;
+            double utilization = (double)sentBytes * 8 / (dev->GetDataRate().GetBitRate() * link_monitor_interval.GetSeconds());
+            
+            avg_utilization += utilization;
+            total_queue_count++;
+            total_queue_len += qlen;
+            
+            if (qlen == 0) {
+                empty_queue_count++;
+            }
+            
+            fprintf(link_monitor_output, ", %u %u %.2lf", dst->GetId(), qlen, utilization);
+        }
+    }
+    
+    // 计算统计信息
+    double empty_ratio = total_queue_count > 0 ? (double)empty_queue_count / total_queue_count : 0.0;
+    double avg_util = total_queue_count > 0 ? avg_utilization / total_queue_count : 0.0;
+    double avg_qlen = total_queue_count > 0 ? (double)total_queue_len / total_queue_count : 0.0;
+    
+    fprintf(link_monitor_output, "\n");
+    fflush(link_monitor_output);
+    
+    // 同时输出到控制台
+    printf("Link state monitor at %lu, empty ratio: %.3lf, avg util: %.3lf, avg qlen: %.3lf\n", 
+        now, empty_ratio, avg_util, avg_qlen);
+}
+
+void schedule_link_monitoring_improved() {
+    check_link_states();
+    
+    if (Simulator::Now() < Seconds(flowgen_stop_time + 0.05)) {
+        Simulator::Schedule(link_monitor_interval, &schedule_link_monitoring_improved);
+    }
+}
+
 /**
  * Scheduling flows given in /config/L_XX....txt file
  */
@@ -468,6 +551,25 @@ void ScheduleFlowInputs(FILE *infile) {
         }
         Settings::FlowId2Length[flow_input.idx] = target_len;
         assert(n.Get(src)->GetNodeType() == 0 && n.Get(dst)->GetNodeType() == 0);
+
+        ////////////////flow_info///////////////
+        Settings::flow_info[flow_input.idx].src = src;
+        Settings::flow_info[flow_input.idx].dst = dst;
+        Settings::flow_info[flow_input.idx].pg = pg;
+        Settings::flow_info[flow_input.idx].fsize = flow_input.maxPacketCount;
+        Settings::flow_info[flow_input.idx].sport = sport;  // 使用源端口
+        Settings::flow_info[flow_input.idx].dport = dport;  // 使用目的端口
+        Settings::flow_info[flow_input.idx].start_time = flow_input.start_time;
+        Settings::flow_info[flow_input.idx].finish_time = 0;  // 初始化为0，完成时更新
+        Settings::flow_info[flow_input.idx].idx = flow_input.idx;
+        Settings::flow_info[flow_input.idx].isFinished = false;
+        Settings::flow_info[flow_input.idx].reorderable = flow_input.reorderable;
+        Settings::flow_info[flow_input.idx].max_ooo_degree = 0;
+        Settings::flow_info[flow_input.idx].src_routing_pkt = 0;
+        Settings::flow_info[flow_input.idx].randomly_routing_pkt = 0;
+
+
+        
 
         /**
          * Turn on if you want to record all input streams into output file for logging.
@@ -1509,6 +1611,9 @@ int main(int argc, char *argv[]) {
                 conf >> v;
                 flow_input_file = v;
                 std::cerr << "FLOW_INPUT_FILE\t\t\t" << flow_input_file << "\n";
+            } else if (key.compare("LINK_MONITOR_FILE") == 0) {
+                conf >> link_monitor_file;
+                std::cerr << "LINK_MONITOR_FILE\t\t" << link_monitor_file << "\n";
             } else if (key.compare("CC_ENABLED") == 0) {
                 uint32_t v;
                 conf >> v;
@@ -1534,6 +1639,11 @@ int main(int argc, char *argv[]) {
                 conf >> v;
                 caver_ack_route = v;
                 std::cerr << "CAVER_ACK_ROUTE\t\t\t" << caver_ack_route << "\n";
+            } else if (key.compare("CAVER_PERHOP_PATH_SELECT") == 0) {
+                uint32_t v;
+                conf >> v;
+                caver_perHop_path_select = v;
+                std::cerr << "CAVER_PERHOP_PATH_SELECT\t\t" << caver_perHop_path_select << "\n";
             } else if (key.compare("QP_STAT_OUTPUT_FILE") == 0) {
                 conf >> qp_stat_output_file;
                 std::cerr << "QP_STAT_OUTPUT_FILE\t\t" << qp_stat_output_file << "\n";
@@ -2275,6 +2385,22 @@ int main(int argc, char *argv[]) {
                               "must set kmax for each link speed");
                 NS_ASSERT_MSG(rate2pmax.find(rate) != rate2pmax.end(),
                               "must set pmax for each link speed");
+                if (rate2kmin.find(rate) == rate2kmin.end() || 
+                    rate2kmax.find(rate) == rate2kmax.end() || 
+                    rate2pmax.find(rate) == rate2pmax.end()) {
+                    
+                    std::cout << "ERROR: Missing ECN config for rate " << rate << " bps (" 
+                            << (rate / 1e9) << " Gbps)" << std::endl;
+                    std::cout << "Switch " << i << ", Port " << j << std::endl;
+                    
+                    std::cout << "Available rates in config:" << std::endl;
+                    for (const auto& entry : rate2kmin) {
+                        std::cout << "  " << entry.first << " bps (" << (entry.first / 1e9) << " Gbps)" << std::endl;
+                    }
+                    fflush(stderr);
+                }
+
+
                 assert(rate2kmin.find(rate) != rate2kmin.end() &&
                        rate2kmax.find(rate) != rate2kmax.end() &&
                        rate2pmax.find(rate) != rate2pmax.end());
@@ -2351,6 +2477,7 @@ int main(int argc, char *argv[]) {
     topo2bdpMap[std::string("leaf_spine_128_100G_OS2")] = 104000;  // RTT=8320
     topo2bdpMap[std::string("fat_k4_100G_OS2")] = 156000;
     topo2bdpMap[std::string("fat_k8_100G_OS2")] = 156000;  
+    topo2bdpMap[std::string("ununiform_fat_k8_100G_OS2")] = 156000;
     topo2bdpMap[std::string("fat_k8_100G_OS1")] = 156000;  
     topo2bdpMap[std::string("fat_k8_100G_bond_OS2")] = 156000;     // RTT=12480 --> all 100G links
     topo2bdpMap[std::string("fat_k8_100G_bond_OS1")] = 156000;
@@ -2957,7 +3084,7 @@ int main(int argc, char *argv[]) {
                                                            caver_flowletTimeout, caver_quantizeBit,
                                                            caver_alpha, caver_ce_threshold, caver_patchoiceTimeout,
                                                             caver_pathChoice_num, caver_tau, caver_useEWMA, caver_per_host_routing, 
-                                                            caver_per_host_routing_scheme, caver_metric_choice, caver_data_backup_route, caver_ack_route);
+                                                            caver_per_host_routing_scheme, caver_metric_choice, caver_data_backup_route, caver_ack_route, caver_perHop_path_select);
                 sw->m_mmu->m_caverRouting.SetSwitchInfo(sw->m_isToR, sw->GetId());
                 // dive into related
             }
@@ -3191,6 +3318,12 @@ if (lb_mode == 21){
     Settings::caverLog = fopen((pfc_output_file.substr(0, lastSlashPos + 1) + "caver_log.txt").c_str(), "w");
     packetId2FlowId = fopen((pfc_output_file.substr(0, lastSlashPos + 1) + "packetId2FlowId.txt").c_str(), "w");
     ideal_ce = fopen((pfc_output_file.substr(0, lastSlashPos + 1) + "ideal_ce.txt").c_str(), "w");
+
+
+
+    link_monitor_output = fopen(link_monitor_file.c_str(), "w");
+    // 在仿真开始前添加调度
+    Simulator::Schedule(Seconds(flowgen_start_time), &schedule_link_monitoring_improved);
 
     //
     // Now, do the actual simulation.

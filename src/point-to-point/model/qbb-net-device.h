@@ -85,6 +85,7 @@ public:
   QbbNetDevice ();
   virtual ~QbbNetDevice ();
 
+  uint32_t totalBytesSent = 0;
   /**
    * Receive a packet from a connected PointToPointChannel.
    *

@@ -489,6 +489,9 @@ bool QbbNetDevice::TransmitStart(Ptr<Packet> p) {
     if (result == false) {
         m_phyTxDropTrace(p);
     }
+
+    totalBytesSent += p->GetSize();
+    
     return result;
 }
 

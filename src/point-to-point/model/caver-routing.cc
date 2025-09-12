@@ -226,6 +226,11 @@ namespace ns3 {
         } else {
             m_outPort2BitRateMap[outPort] = bitRate;
         }
+        if (topo_log){
+            std::cout << "[SetLinkCapacity] switch_id: " << m_switch_id
+                      << ", outPort: " << outPort
+                      << ", bitRate: " << bitRate << std::endl;
+        }
     }
 
     uint32_t CaverRouting::UpdateLocalDre(Ptr<Packet> p, CustomHeader ch, uint32_t outPort) {
@@ -449,7 +454,15 @@ namespace ns3 {
                             if(metric_choice == 1){
                                 outport = ChooseNextHopByPerHopCaverWithQueue(host_id);
                             }else{
-                                outport = ChooseNextHopByPerHopCaver(host_id);
+                                if(perHop_path_select == 0){
+                                    outport = ChooseNextHopByPerHopCaver(host_id);
+                                } else if(perHop_path_select == 1){
+                                    outport = ChooseNextHopByPerHopCaver_valid(host_id);
+                                } else if (perHop_path_select == 2){
+                                    outport = ChooseNextHopByPerHopCaver_best(host_id);
+                                } else{
+                                    assert(false && "wrong perHop_path_select");
+                                }
                             }
                             udpTag.SetSrcRouteEnable(false);
                             udpTag.SetPathId(0);
@@ -684,7 +697,15 @@ namespace ns3 {
                         if (metric_choice == 1) {
                             outPort = ChooseNextHopByPerHopCaverWithQueue(host_id);
                         }else{
-                            outPort = ChooseNextHopByPerHopCaver(host_id);
+                            if(perHop_path_select == 0){
+                                outPort = ChooseNextHopByPerHopCaver(host_id);
+                            } else if(perHop_path_select == 1){
+                                outPort = ChooseNextHopByPerHopCaver_valid(host_id);
+                            } else if (perHop_path_select == 2){
+                                outPort = ChooseNextHopByPerHopCaver_best(host_id);
+                            } else{
+                                assert(false && "wrong perHop_path_select");
+                            }
                         }
                         p->AddPacketTag(udpTag);
                         uint32_t X = UpdateLocalDre(p, ch, outPort);  // update local DRE
@@ -848,7 +869,20 @@ namespace ns3 {
                         if (metric_choice == 1){
                             UpdatePerHopCaverInfo(host_id, inPort, ackTag.GetQuequeLength(), now);
                         }else{
-                            UpdatePerHopCaverInfo(host_id, inPort, remoteBestCE, now);
+                            if (perHop_path_select == 0){
+                                UpdatePerHopCaverInfo(host_id, inPort, remoteBestCE, now);
+                            } else if (perHop_path_select == 1 || perHop_path_select == 2)  {
+                                uint32_t remoteMCE = ackTag.GetMCE();
+                                uint32_t totalMCE = std::max(localCE, remoteMCE);
+                                bool M_is_usable = false;
+                                if ((256 - std::min(totalMCE, 256u)) * m_ce_threshold >=
+                                    256 - (std::min(currentBestCE, 256u))) {
+                                    M_is_usable = true;
+                                }
+                                if(M_is_usable){
+                                    UpdatePerHopCaverInfo(host_id, inPort, remoteMCE, now);
+                                }
+                            }
                         }
                     }
                 }                       
@@ -936,7 +970,20 @@ namespace ns3 {
                         UpdatePerHopCaverInfo(host_id, inPort, ackTag.GetQuequeLength(), now);
                         ackTag.SetQuequeLength(GetMinValidMetricWithQueueLength(host_id));
                     }else{
-                    UpdatePerHopCaverInfo(host_id, inPort, remoteBestCE, now);
+                        if (perHop_path_select == 0){
+                            UpdatePerHopCaverInfo(host_id, inPort, remoteBestCE, now);
+                        } else if (perHop_path_select == 1 || perHop_path_select == 2)  {
+                            uint32_t remoteMCE = ackTag.GetMCE();
+                            uint32_t totalMCE = std::max(localCE, remoteMCE);
+                            bool M_is_usable = false;
+                            if ((256 - std::min(totalMCE, 256u)) * m_ce_threshold >=
+                                256 - (std::min(currentBestCE, 256u))) {
+                                M_is_usable = true;
+                            }
+                            if(M_is_usable){
+                                UpdatePerHopCaverInfo(host_id, inPort, remoteMCE, now);
+                            }
+                        }
                     }
                 }
             }
@@ -1180,7 +1227,118 @@ namespace ns3 {
         // 一次性输出整行
         std::cout << oss.str() << std::endl;
     }
-    
+    uint32_t CaverRouting::ChooseNextHopByPerHopCaver_valid(uint32_t host_id){
+        // 从per-hop表中获取所有可用端口
+        auto host_it = per_hop_caver_table.find(host_id);
+        assert(host_it != per_hop_caver_table.end() && "No per-hop caver table entry found for host");
+        
+        const auto& port_map = host_it->second;
+        assert(!port_map.empty() && "No ports available in per-hop caver table for host");
+        
+        // 收集所有valid的端口
+        std::vector<uint32_t> valid_ports;
+        
+        for (const auto& port_entry : port_map) {
+            uint32_t port = port_entry.first;
+            const PerHopCaverInfo& info = port_entry.second;
+            
+            if (info.valid) {
+                valid_ports.push_back(port);
+            }
+        }
+        
+        // 如果没有valid端口，从所有端口中随机选择
+        if (valid_ports.empty()) {
+            std::vector<uint32_t> all_ports;
+            for (const auto& port_entry : port_map) {
+                all_ports.push_back(port_entry.first);
+            }
+            
+            assert(!all_ports.empty() && "No ports available");
+            
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> dis(0, all_ports.size() - 1);
+            uint32_t selected_port = all_ports[dis(gen)];
+            
+            return selected_port;
+        }
+        
+        // 从valid端口中随机选择
+        if (valid_ports.size() == 1) {
+            return valid_ports[0];
+        } else {
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> dis(0, valid_ports.size() - 1);
+            uint32_t selected_port = valid_ports[dis(gen)];
+            
+            return selected_port;
+        }
+
+    }
+    // 在 caver-routing.cc 中添加函数实现
+    uint32_t CaverRouting::ChooseNextHopByPerHopCaver_best(uint32_t host_id) {
+        // 从per-hop表中获取所有可用端口
+        auto host_it = per_hop_caver_table.find(host_id);
+        assert(host_it != per_hop_caver_table.end() && "No per-hop caver table entry found for host");
+        
+        const auto& port_map = host_it->second;
+        assert(!port_map.empty() && "No ports available in per-hop caver table for host");
+        
+        // 计算每个端口的指标
+        std::map<uint32_t, uint32_t> port_metrics;
+        uint32_t min_metric = UINT32_MAX;
+        
+        for (const auto& port_entry : port_map) {
+            uint32_t port = port_entry.first;
+            const PerHopCaverInfo& info = port_entry.second;
+            
+            uint32_t local_ce = QuantizingX(port, m_DreMap[port]);
+            uint32_t metric;
+            
+            // 检查per-hop表中是否有有效的记录
+            if (info.valid) {
+                if (metric_choice == 1) {
+                    // metric_choice == 1: 使用 port的queue + 表里的项
+                    uint32_t queue_length = GetPortTotalQueueLength(port);
+                    metric = queue_length + info.remoteCE;
+                } else {
+                    // metric_choice == 0: 使用 max(localCE, remoteCE)
+                    metric = std::max(local_ce, info.remoteCE);
+                }
+            } else {
+                // 如果表项无效，使用localCE作为默认值
+                metric = local_ce;
+            }
+            
+            port_metrics[port] = metric;
+            min_metric = std::min(min_metric, metric);
+        }
+        
+        // 找到所有具有最小指标的端口
+        std::vector<uint32_t> best_ports;
+        for (const auto& metric_entry : port_metrics) {
+            if (metric_entry.second == min_metric) {
+                best_ports.push_back(metric_entry.first);
+            }
+        }
+        
+        assert(!best_ports.empty() && "No best ports found");
+        
+        // 如果有多个最优端口，随机选择一个
+        if (best_ports.size() == 1) {
+            return best_ports[0];
+        } else {
+            std::random_device rd;
+            std::mt19937 gen(rd());
+            std::uniform_int_distribution<> dis(0, best_ports.size() - 1);
+            uint32_t selected_port = best_ports[dis(gen)];
+            return selected_port;
+        }
+    }
+
+
     // 修改ChooseNextHopByPerHopCaver函数
     uint32_t CaverRouting::ChooseNextHopByPerHopCaver(uint32_t host_id) {
         if (Route_log) {
@@ -1551,7 +1709,7 @@ namespace ns3 {
     void CaverRouting::SetConstants(Time dreTime, Time agingTime, Time flowletTimeout,
                                     uint32_t quantizeBit, double alpha, double ce_threshold, Time patchoiceTimeout, uint32_t pathChoice_num, 
                                     Time tau, bool useEWMA,
-                                    bool perHostRouting, uint32_t perHostRoutingScheme, uint32_t metricChoice, uint32_t dataBackupRoute, uint32_t ackRoute) {
+                                    bool perHostRouting, uint32_t perHostRoutingScheme, uint32_t metricChoice, uint32_t dataBackupRoute, uint32_t ackRoute, uint32_t perHopPathSelect) {
         m_dreTime = dreTime;
         m_agingTime = agingTime;
         m_flowletTimeout = flowletTimeout;
@@ -1571,6 +1729,11 @@ namespace ns3 {
         this->metric_choice = metricChoice; 
         this->data_backup_route = dataBackupRoute;      // 新增设置
         this->ack_route = ackRoute; 
+        this->perHop_path_select = perHopPathSelect; 
+
+        std::cout << "[CAVER_CONFIG] Switch " << m_switch_id 
+              << " - perHop_path_select set to: " << perHop_path_select 
+              << std::endl;
     }
 
     void CaverRouting::DoDispose() {

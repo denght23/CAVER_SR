@@ -191,7 +191,8 @@ class CaverRouting : public Object {
                       uint32_t perHostRoutingScheme,
                       uint32_t metricChoice,
                       uint32_t dataBackupRoute,      // 新增参数
-                      uint32_t ackRoute);
+                      uint32_t ackRoute,
+                      uint32_t perHopPathSelect);       // 新增参数
     void SetSwitchInfo(bool isToR, uint32_t switch_id);
     void SetLinkCapacity(uint32_t outPort, uint64_t bitRate);
 
@@ -259,6 +260,8 @@ class CaverRouting : public Object {
 
     uint32_t metric_choice = 1; // 0: DRE, 1: queue; ACK piggyback information
 
+    uint32_t perHop_path_select = 1; //0:best, 1:good_only_store random select, 2:good_only_store best select//关于path_hopTable中怎么存信息
+
             // per-host routing 
     bool per_host_routing = true;
     uint32_t per_host_routing_scheme = 1; // 0: like caver, 1: per-host dynamic 
@@ -276,6 +279,8 @@ class CaverRouting : public Object {
 
     uint32_t ChooseNextHopByPerHopCaver(uint32_t host_id);
     uint32_t ChooseNextHopByPerHopCaverWithQueue(uint32_t host_id);
+    uint32_t ChooseNextHopByPerHopCaver_valid(uint32_t host_id);
+    uint32_t ChooseNextHopByPerHopCaver_best(uint32_t host_id);
 
     void SetGetPortQueueLengthCallback(GetPortQueueLengthCallback callback);
     uint32_t GetPortTotalQueueLength(uint32_t port);
@@ -283,6 +288,7 @@ class CaverRouting : public Object {
     void LogPerHopCaverChoice(uint32_t host_id, const std::map<uint32_t, PerHopCaverInfo>& port_map);
     bool Perhop_log = false;
     bool Perhop_debug_log = false;
+    bool topo_log = true;
     
     private:
         SwitchSendCallback m_switchSendCallback;  // bound to SwitchNode::SwitchSend (for Request/UDP)

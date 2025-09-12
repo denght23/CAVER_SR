@@ -116,6 +116,21 @@ struct PerHopCaverInfo {
     PerHopCaverInfo(uint32_t ce, Time time, bool v) : remoteCE(ce), updateTime(time), valid(v) {}
 };
 
+struct m_FlowInput {
+    uint32_t src, dst, pg, fsize, sport, dport;
+    double start_time, finish_time = 0;
+    uint32_t idx;
+    uint32_t srcTor, dstTor;
+    bool isFinished = false;
+    bool reorderable = false;
+    uint32_t max_ooo_degree = 0;
+    uint32_t src_routing_pkt = 0;
+    uint32_t randomly_routing_pkt = 0;
+    inline void record_switch_node(uint32_t switch_id) {
+        return;
+    }
+};
+
 /**
  * @brief Tag for monitoring last data sending time per flow
  */
@@ -255,6 +270,8 @@ class Settings {
     static void print_flow_distribution(FILE *out, Time nextTime);
 
     static uint32_t dropped_flow_id;
+    
+    static std::vector<m_FlowInput> flow_info;
 
     // 重排内容 by zyf
     static std::unordered_map<std::tuple<uint32_t, uint32_t, uint16_t, uint16_t>, bool, Settings::tuple_hash> reorderable; // 记录每个流是否支持重排，四元组：sip, dip, sport, dport
@@ -273,6 +290,7 @@ class Settings {
         std::unordered_map<uint32_t, FlowRecord> flowRecorder;
     };
     static std::unordered_map<uint64_t, struct LinkRecord> linkRecorder; 
+
 };
 
 }  // namespace ns3
