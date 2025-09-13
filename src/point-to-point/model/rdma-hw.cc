@@ -228,7 +228,8 @@ void RdmaHw::Setup(QpCompleteCallback cb) {
 uint32_t RdmaHw::GetNicIdxOfQp(Ptr<RdmaQueuePair> qp) {
     if (Settings::lb_mode == 9 || Settings::lb_mode == 12 || Settings::lb_mode == 3 || Settings::lb_mode == 6){
         //对于ConWeave， 在这里指定Src到达SrcToR的结果：
-        uint32_t flow_id = Settings::QPPair_info2FlowId[std::make_tuple(qp->sip, qp->dip, qp->sport, qp->dport)];
+        uint32_t flow_id = qp->m_flow_id;
+        assert(flow_id >= 0);
         uint32_t SrcToR_id = Settings::flowId2SrcDst[flow_id].first;
         uint32_t outPort = Settings::flowId2Port2Src[flow_id];
         return outPort;
@@ -421,11 +422,7 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch) {
         }
     }
 
-    // 获取 reorderable 状态
-    std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(ch.sip, ch.dip, ch.udp.sport, ch.udp.dport);
-    auto it = Settings::reorderable.find(flow_key);
-    rxQp->m_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
-
+    
     uint32_t seq = ch.udp.seq;
     uint32_t mtu = m_mtu;  // 从 RdmaHw 的 m_mtu 获取
     uint32_t window_end = rxQp->m_window_start + 64 * mtu;
@@ -446,6 +443,9 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch) {
             rxQp->m_flow_id = fit.GetId();
         }
     }
+
+    rxQp->m_reorderable = Settings::flow_info[rxQp->m_flow_id].reorderable;
+
 
     bool cnp_check = false;
     int x = 1;  // 默认正常
@@ -1139,6 +1139,10 @@ int RdmaHw::Receiver_SR_CheckSeq(uint32_t seq, Ptr<RdmaRxQueuePair> q, uint32_t 
         return 2;
     }
     else if (seq > expected){
+        uint32_t current_max_ooo = Settings::flow_info[q->m_flow_id].max_ooo_degree;
+        if (seq - expected > current_max_ooo){
+            Settings::flow_info[q->m_flow_id].max_ooo_degree = seq - expected;
+        }
         if (seq >= expected + m_SR_window) {
             if (m_srLog) {
                 std::cout << "OOO [SR RX] node:" << m_node->GetId()
@@ -1668,7 +1672,8 @@ void RdmaHw::HandleTimeout(Ptr<RdmaQueuePair> qp, Time rto) {
     acc_timeout_count[qp->m_flow_id]++;
 
     if (qp->irn.m_enabled) qp->irn.m_recovery = true;
-    printf("Retransmition Timeout! Flow:%u\n", Settings::QPPair_info2FlowId[std::make_tuple(qp->sip, qp->dip, qp->sport, qp->dport)]);
+    printf("Retransmition Timeout! Flow:%u\n", qp->m_flow_id);
+
     RecoverQueue(qp);
     dev->TriggerTransmit();
 }
@@ -2122,15 +2127,8 @@ void RdmaHw::LogQpStats(Ptr<RdmaQueuePair> qp) {
 
     // 获取 flow ID
     uint32_t flow_id = qp->m_flow_id;
-    if (flow_id < 0) {
-        // 如果没有设置 flow_id，尝试从 Settings 中获取
-        auto key = std::make_tuple(qp->sip, qp->dip, qp->sport, qp->dport);
-        auto it = Settings::QPPair_info2FlowId.find(key);
-        if (it != Settings::QPPair_info2FlowId.end()) {
-            flow_id = it->second;
-        } else {
-            flow_id = 0; // 默认值
-        }
+    if (flow_id < 0){
+        assert(false && "Flow ID is negative");
     }
 
     // 获取源和目的节点 ID
@@ -2139,7 +2137,7 @@ void RdmaHw::LogQpStats(Ptr<RdmaQueuePair> qp) {
 
     // 写入统计信息到文件
     // 格式：flow_id src_id dst_id sport dport original_size actual_data_bytes actual_total_bytes packet_count start_time end_time duration
-    fprintf(m_qpStatFile, "%u %u %u %u %u %lu %lu %lu %lu %lu %lu %lu\n",
+    fprintf(m_qpStatFile, "%u %u %u %u %u %lu %lu %lu %lu %lu %lu %lu %u\n",
             flow_id,                                    // flow ID
             src_id,                                     // 源节点 ID  
             dst_id,                                     // 目的节点 ID
@@ -2151,7 +2149,8 @@ void RdmaHw::LogQpStats(Ptr<RdmaQueuePair> qp) {
             qp->stat.txTotalPkts,                       // 实际发送的包数量
             qp->stat.startTime.GetTimeStep(),           // 开始时间
             qp->stat.endTime.GetTimeStep(),             // 结束时间
-            (qp->stat.endTime - qp->stat.startTime).GetTimeStep()  // 持续时间
+            (qp->stat.endTime - qp->stat.startTime).GetTimeStep(),  // 持续时间
+            Settings::flow_info[flow_id].max_ooo_degree // 最大乱序度
     );
     fflush(m_qpStatFile);
 }  

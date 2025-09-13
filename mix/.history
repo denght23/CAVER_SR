@@ -1416,3 +1416,271 @@
 ./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[357]-09-12-16:59:26-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[357]-09-12-16:59:26-caver-80/config.log 2>&1
 ./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[357]-09-12-16:59:26-caver-80/config.txt'
 
+09/12/25,[358]-09-12-17:18:41-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[358]-09-12-17:18:41-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[358]-09-12-17:18:41-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[358]-09-12-17:18:41-caver-80/config.txt'
+
+09/12/25,[359]-09-12-17:19:42-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[359]-09-12-17:19:42-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[359]-09-12-17:19:42-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[359]-09-12-17:19:42-caver-80/config.txt'
+
+09/12/25,[360]-09-12-18:00:45-caver-80,1,20,32,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[360]-09-12-18:00:45-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[360]-09-12-18:00:45-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[360]-09-12-18:00:45-caver-80/config.txt'
+
+09/12/25,[361]-09-12-18:21:41-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[361]-09-12-18:21:41-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[361]-09-12-18:21:41-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[361]-09-12-18:21:41-caver-80/config.txt'
+
+09/12/25,[362]-09-12-18:21:46-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[362]-09-12-18:21:46-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[362]-09-12-18:21:46-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[362]-09-12-18:21:46-caver-80/config.txt'
+
+09/12/25,[363]-09-12-18:21:50-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[363]-09-12-18:21:50-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[363]-09-12-18:21:50-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[363]-09-12-18:21:50-caver-80/config.txt'
+
+09/12/25,[364]-09-12-18:22:03-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[364]-09-12-18:22:03-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[364]-09-12-18:22:03-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[364]-09-12-18:22:03-caver-80/config.txt'
+
+09/12/25,[365]-09-12-18:22:14-caver-80,1,20,32,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[365]-09-12-18:22:14-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[365]-09-12-18:22:14-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[365]-09-12-18:22:14-caver-80/config.txt'
+
+09/12/25,[366]-09-12-18:22:24-caver-80,1,20,0,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[366]-09-12-18:22:24-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[366]-09-12-18:22:24-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[366]-09-12-18:22:24-caver-80/config.txt'
+
+09/12/25,[367]-09-12-20:09:50-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[367]-09-12-20:09:50-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[367]-09-12-20:09:50-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[367]-09-12-20:09:50-caver-80/config.txt'
+
+09/12/25,[368]-09-12-20:33:40-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[368]-09-12-20:33:40-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[368]-09-12-20:33:40-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[368]-09-12-20:33:40-caver-80/config.txt'
+
+09/12/25,[369]-09-12-20:39:41-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[369]-09-12-20:39:41-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[369]-09-12-20:39:41-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[369]-09-12-20:39:41-caver-80/config.txt'
+
+09/12/25,[370]-09-12-20:40:06-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[370]-09-12-20:40:06-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[370]-09-12-20:40:06-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[370]-09-12-20:40:06-caver-80/config.txt'
+
+09/12/25,[371]-09-12-20:41:02-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[371]-09-12-20:41:02-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[371]-09-12-20:41:02-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[371]-09-12-20:41:02-caver-80/config.txt'
+
+09/12/25,[372]-09-12-20:51:58-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[372]-09-12-20:51:58-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[372]-09-12-20:51:58-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[372]-09-12-20:51:58-caver-80/config.txt'
+
+09/12/25,[373]-09-12-21:05:44-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[373]-09-12-21:05:44-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[373]-09-12-21:05:44-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[373]-09-12-21:05:44-caver-80/config.txt'
+
+09/12/25,[374]-09-12-21:20:42-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[374]-09-12-21:20:42-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[374]-09-12-21:20:42-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[374]-09-12-21:20:42-caver-80/config.txt'
+
+09/12/25,[375]-09-12-21:31:37-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[375]-09-12-21:31:37-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[375]-09-12-21:31:37-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[375]-09-12-21:31:37-caver-80/config.txt'
+
+09/12/25,[376]-09-12-22:13:18-caver-80,1,20,0,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[376]-09-12-22:13:18-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[376]-09-12-22:13:18-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[376]-09-12-22:13:18-caver-80/config.txt'
+
+09/12/25,[377]-09-12-22:18:22-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[377]-09-12-22:18:22-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[377]-09-12-22:18:22-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[377]-09-12-22:18:22-caver-80/config.txt'
+
+09/12/25,[378]-09-12-22:26:15-caver-80,1,20,0,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[378]-09-12-22:26:15-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[378]-09-12-22:26:15-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[378]-09-12-22:26:15-caver-80/config.txt'
+
+09/12/25,[379]-09-12-22:28:47-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[379]-09-12-22:28:47-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[379]-09-12-22:28:47-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[379]-09-12-22:28:47-caver-80/config.txt'
+
+09/12/25,[380]-09-12-22:32:44-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[380]-09-12-22:32:44-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[380]-09-12-22:32:44-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[380]-09-12-22:32:44-caver-80/config.txt'
+
+09/13/25,[381]-09-13-00:22:57-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[381]-09-13-00:22:57-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[381]-09-13-00:22:57-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[381]-09-13-00:22:57-caver-80/config.txt'
+
+09/13/25,[382]-09-13-00:27:03-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[382]-09-13-00:27:03-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[382]-09-13-00:27:03-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[382]-09-13-00:27:03-caver-80/config.txt'
+
+09/13/25,[383]-09-13-00:29:23-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[383]-09-13-00:29:23-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[383]-09-13-00:29:23-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[383]-09-13-00:29:23-caver-80/config.txt'
+
+09/13/25,[384]-09-13-00:32:06-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,64000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[384]-09-13-00:32:06-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[384]-09-13-00:32:06-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[384]-09-13-00:32:06-caver-80/config.txt'
+
+09/13/25,[385]-09-13-00:59:59-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[385]-09-13-00:59:59-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[385]-09-13-00:59:59-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[385]-09-13-00:59:59-caver-80/config.txt'
+
+09/13/25,[386]-09-13-01:00:47-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[386]-09-13-01:00:47-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[386]-09-13-01:00:47-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[386]-09-13-01:00:47-caver-80/config.txt'
+
+09/13/25,[387]-09-13-11:39:40-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[387]-09-13-11:39:40-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[387]-09-13-11:39:40-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[387]-09-13-11:39:40-caver-80/config.txt'
+
+09/13/25,[388]-09-13-11:40:18-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[388]-09-13-11:40:18-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[388]-09-13-11:40:18-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[388]-09-13-11:40:18-caver-80/config.txt'
+
+09/13/25,[389]-09-13-14:38:07-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[389]-09-13-14:38:07-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[389]-09-13-14:38:07-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[389]-09-13-14:38:07-caver-80/config.txt'
+
+09/13/25,[390]-09-13-14:38:14-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[390]-09-13-14:38:14-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[390]-09-13-14:38:14-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[390]-09-13-14:38:14-caver-80/config.txt'
+
+09/13/25,[391]-09-13-14:38:20-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[391]-09-13-14:38:20-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[391]-09-13-14:38:20-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[391]-09-13-14:38:20-caver-80/config.txt'
+
+09/13/25,[392]-09-13-14:40:03-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[392]-09-13-14:40:03-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[392]-09-13-14:40:03-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[392]-09-13-14:40:03-caver-80/config.txt'
+
+09/13/25,[393]-09-13-14:40:55-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[393]-09-13-14:40:55-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[393]-09-13-14:40:55-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[393]-09-13-14:40:55-caver-80/config.txt'
+
+09/13/25,[394]-09-13-14:58:09-caver-60,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,60,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[394]-09-13-14:58:09-caver-60/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[394]-09-13-14:58:09-caver-60/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[394]-09-13-14:58:09-caver-60/config.txt'
+
+09/13/25,[395]-09-13-15:00:01-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[395]-09-13-15:00:01-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[395]-09-13-15:00:01-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[395]-09-13-15:00:01-caver-80/config.txt'
+
+09/13/25,[396]-09-13-15:00:20-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[396]-09-13-15:00:20-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[396]-09-13-15:00:20-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[396]-09-13-15:00:20-caver-80/config.txt'
+
+09/13/25,[397]-09-13-15:00:31-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[397]-09-13-15:00:31-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[397]-09-13-15:00:31-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[397]-09-13-15:00:31-caver-80/config.txt'
+
+09/13/25,[398]-09-13-15:00:55-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[398]-09-13-15:00:55-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[398]-09-13-15:00:55-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[398]-09-13-15:00:55-caver-80/config.txt'
+
+09/13/25,[399]-09-13-15:01:21-caver-80,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[399]-09-13-15:01:21-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[399]-09-13-15:01:21-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[399]-09-13-15:01:21-caver-80/config.txt'
+
+09/13/25,[400]-09-13-15:02:13-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[400]-09-13-15:02:13-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[400]-09-13-15:02:13-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[400]-09-13-15:02:13-caver-80/config.txt'
+
+09/13/25,[401]-09-13-15:02:50-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[401]-09-13-15:02:50-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[401]-09-13-15:02:50-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[401]-09-13-15:02:50-caver-80/config.txt'
+
+09/13/25,[402]-09-13-15:03:18-caver-60,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,60,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[402]-09-13-15:03:18-caver-60/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[402]-09-13-15:03:18-caver-60/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[402]-09-13-15:03:18-caver-60/config.txt'
+
+09/13/25,[403]-09-13-15:04:12-caver-60,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,60,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[403]-09-13-15:04:12-caver-60/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[403]-09-13-15:04:12-caver-60/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[403]-09-13-15:04:12-caver-60/config.txt'
+
+09/13/25,[404]-09-13-15:06:39-caver-60,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,60,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[404]-09-13-15:06:39-caver-60/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[404]-09-13-15:06:39-caver-60/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[404]-09-13-15:06:39-caver-60/config.txt'
+
+09/13/25,[405]-09-13-15:07:22-caver-60,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,60,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[405]-09-13-15:07:22-caver-60/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[405]-09-13-15:07:22-caver-60/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[405]-09-13-15:07:22-caver-60/config.txt'
+
+09/13/25,[406]-09-13-15:07:59-caver-60,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS1,100,AliStorage2019,60,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[406]-09-13-15:07:59-caver-60/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[406]-09-13-15:07:59-caver-60/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[406]-09-13-15:07:59-caver-60/config.txt'
+
+09/13/25,[407]-09-13-15:08:29-caver-60,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS1,100,AliStorage2019,60,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[407]-09-13-15:08:29-caver-60/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[407]-09-13-15:08:29-caver-60/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[407]-09-13-15:08:29-caver-60/config.txt'
+
+09/13/25,[408]-09-13-19:08:53-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[408]-09-13-19:08:53-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[408]-09-13-19:08:53-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[408]-09-13-19:08:53-caver-80/config.txt'
+
+09/13/25,[409]-09-13-19:09:23-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[409]-09-13-19:09:23-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[409]-09-13-19:09:23-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[409]-09-13-19:09:23-caver-80/config.txt'
+
+09/13/25,[410]-09-13-19:09:56-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[410]-09-13-19:09:56-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[410]-09-13-19:09:56-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[410]-09-13-19:09:56-caver-80/config.txt'
+
+09/13/25,[411]-09-13-19:10:52-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[411]-09-13-19:10:52-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[411]-09-13-19:10:52-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[411]-09-13-19:10:52-caver-80/config.txt'
+
+09/13/25,[412]-09-13-19:11:32-caver-60,1,20,33,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,60,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[412]-09-13-19:11:32-caver-60/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[412]-09-13-19:11:32-caver-60/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[412]-09-13-19:11:32-caver-60/config.txt'
+
+09/13/25,[413]-09-13-19:12:24-caver-60,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS1,100,AliStorage2019,60,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[413]-09-13-19:12:24-caver-60/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[413]-09-13-19:12:24-caver-60/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[413]-09-13-19:12:24-caver-60/config.txt'
+
+09/13/25,[415]-09-13-19:49:55-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[415]-09-13-19:49:55-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[415]-09-13-19:49:55-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[415]-09-13-19:49:55-caver-80/config.txt'
+
+09/13/25,[416]-09-13-19:54:13-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[416]-09-13-19:54:13-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[416]-09-13-19:54:13-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[416]-09-13-19:54:13-caver-80/config.txt'
+
+09/13/25,[417]-09-13-20:06:04-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[417]-09-13-20:06:04-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[417]-09-13-20:06:04-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[417]-09-13-20:06:04-caver-80/config.txt'
+
+09/13/25,[418]-09-13-20:11:40-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[418]-09-13-20:11:40-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[418]-09-13-20:11:40-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[418]-09-13-20:11:40-caver-80/config.txt'
+
+09/13/25,[419]-09-13-21:12:57-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[419]-09-13-21:12:57-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[419]-09-13-21:12:57-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[419]-09-13-21:12:57-caver-80/config.txt'
+
+09/13/25,[420]-09-13-21:36:40-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[420]-09-13-21:36:40-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[420]-09-13-21:36:40-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[420]-09-13-21:36:40-caver-80/config.txt'
+
+09/13/25,[421]-09-13-21:43:18-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[421]-09-13-21:43:18-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[421]-09-13-21:43:18-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[421]-09-13-21:43:18-caver-80/config.txt'
+
+09/13/25,[422]-09-13-22:23:27-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[422]-09-13-22:23:27-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[422]-09-13-22:23:27-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[422]-09-13-22:23:27-caver-80/config.txt'
+
+09/13/25,[423]-09-13-22:23:56-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[423]-09-13-22:23:56-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[423]-09-13-22:23:56-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[423]-09-13-22:23:56-caver-80/config.txt'
+
+09/13/25,[424]-09-13-22:24:12-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[424]-09-13-22:24:12-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[424]-09-13-22:24:12-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[424]-09-13-22:24:12-caver-80/config.txt'
+
+09/13/25,[425]-09-13-22:49:48-caver-80,1,20,20,1000,4,16,64,400,1,0,0,0,fat_k8_100G_OS2,100,AliStorage2019,80,0.03,1,400,10000000
+./waf --run 'scratch/network-load-balance /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[425]-09-13-22:49:48-caver-80/config.txt' > /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[425]-09-13-22:49:48-caver-80/config.log 2>&1
+./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s /home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/output/[425]-09-13-22:49:48-caver-80/config.txt'
+

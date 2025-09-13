@@ -102,6 +102,7 @@ Time caver_flowletTimeout = MicroSeconds(100); // 100us
 double caver_ce_threshold = 1.5;
 Time caver_patchoiceTimeout = MicroSeconds(50);
 uint32_t caver_pathChoice_num = 4;
+uint32_t caver_threshold_methods = 1;
 
 Time caver_tau = MicroSeconds(100);
 bool caver_useEWMA = true;
@@ -203,7 +204,9 @@ std::string pfc_record_output_file = "pfc_record.txt";
 std::string rate_change_output_file = "rate_change.txt";
 std::string link_monitor_file = "link_monitor.txt";
 
-Time link_monitor_interval = MicroSeconds(50);  // ns
+
+bool ToR_info = true;
+Time link_monitor_interval = MicroSeconds(20);  // ns
 std::string sr_host_file;
 std::unordered_map<uint32_t, int> SR_host_dict;
 
@@ -419,11 +422,9 @@ void check_link_states() {
             uint32_t port = iface.idx;
             uint32_t qlen = sw->m_mmu->egress_bytes[port][3];
             
-            // 使用CAVER的m_DreMap和QuantizingX计算利用率
-            // double utilization = 0.0;
-            // uint32_t dre_value = sw->m_mmu->m_caverRouting.m_DreMap[port];
-            // uint32_t quantized_ce = sw->m_mmu->m_caverRouting.QuantizingX(port, dre_value);
-            // utilization = (double)quantized_ce / 255.0;
+            ////////////使用CAVER的m_DreMap和QuantizingX计算利用率
+            uint32_t quantized_ce = sw->m_mmu->m_caverRouting.GetPortQuanDre(port);
+            double q_Dre = (double)quantized_ce / 255.0;
 
             uint64_t sentBytes = dev->totalBytesSent;
             dev->totalBytesSent = 0;
@@ -436,8 +437,8 @@ void check_link_states() {
             if (qlen == 0) {
                 empty_queue_count++;
             }
-            
-            fprintf(link_monitor_output, ", %u %u %.2lf", dst->GetId(), qlen, utilization);
+
+            fprintf(link_monitor_output, ", %u %u %.2lf %.2lf", dst->GetId(), qlen, utilization, q_Dre);
         }
     }
     
@@ -553,6 +554,7 @@ void ScheduleFlowInputs(FILE *infile) {
         assert(n.Get(src)->GetNodeType() == 0 && n.Get(dst)->GetNodeType() == 0);
 
         ////////////////flow_info///////////////
+        Settings::flow_info.emplace_back();
         Settings::flow_info[flow_input.idx].src = src;
         Settings::flow_info[flow_input.idx].dst = dst;
         Settings::flow_info[flow_input.idx].pg = pg;
@@ -825,7 +827,8 @@ void m_QP_rate_monitoring(FILE *fout_voq)
                 Ipv4Address dst = qp.second->dip;
                 uint16_t sport = qp.second->sport;
                 uint16_t dport = qp.second->dport;
-                uint32_t flowid = Settings::QPPair_info2FlowId[std::make_tuple(src, dst, sport, dport)];
+                // uint32_t flowid = Settings::QPPair_info2FlowId[std::make_tuple(src, dst, sport, dport)];
+                uint32_t flowid = qp.second->m_flow_id;
                 DataRate m_rate = qp.second->m_rate;
                 uint64_t m_bps = m_rate.GetBitRate();
                 // std::cout << "bps: " << now << flowid << m_bps << std::endl;
@@ -1079,9 +1082,10 @@ void qp_finish(FILE *fout, Ptr<RdmaQueuePair> q) {
     Ptr<Node> dstNode = n.Get(did);
     Ptr<RdmaDriver> rdma = dstNode->GetObject<RdmaDriver>();
     rdma->m_rdma->DeleteRxQp(q->sip.Get(), q->sport, q->dport, q->m_pg);
-    std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(Settings::hostId2IpMap[Settings::ip_to_node_id(q->sip)], Settings::hostId2IpMap[Settings::ip_to_node_id(q->dip)], q->sport, q->dport);
-    auto it = Settings::reorderable.find(flow_key);
-    bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
+    // std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(Settings::hostId2IpMap[Settings::ip_to_node_id(q->sip)], Settings::hostId2IpMap[Settings::ip_to_node_id(q->dip)], q->sport, q->dport);
+    // auto it = Settings::reorderable.find(flow_key);
+    // bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
+    bool flow_reorderable = Settings::flow_info[q->m_flow_id].reorderable;
 
     // fprintf(fout, "%lu QP complete\n", Simulator::Now().GetTimeStep());
     fprintf(fout, "%u %u %u %u %lu %lu %lu %lu %d\n", Settings::ip_to_node_id(q->sip),
@@ -1098,23 +1102,23 @@ void qp_finish(FILE *fout, Ptr<RdmaQueuePair> q) {
     fflush(fout);
 
     //clean
-    static std::queue<std::tuple<Ipv4Address, Ipv4Address, uint16_t, uint16_t>> finishedQpBuffer; //这个buffer存放将要被清理的flow。但是我们不能立即清理，因为在乱序状态下依旧可能有部分包残存在拓扑中
-    uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(sid, did, q->sport, q->dport)];
-    fprintf(packetId2FlowId, "FlowKey: (%u %u %u %u) -> FlowId: %u\n", sid, did, q->sport, q->dport, flow_id);
-
-    finishedQpBuffer.push(std::make_tuple(q->sip, q->dip, static_cast<uint16_t>(q->sport), static_cast<uint16_t>(q->dport)));
-    if (finishedQpBuffer.size() > 100000) {
-        auto& qp_info = finishedQpBuffer.front();
-        uint32_t flow_id = Settings::QPPair_info2FlowId[qp_info];    
-        Settings::PacketId2FlowId.erase(std::make_tuple(Settings::ip_to_node_id(std::get<0>(qp_info)), Settings::ip_to_node_id(std::get<1>(qp_info)), std::get<2>(qp_info), std::get<3>(qp_info)));
-        Settings::flowId2SrcDst.erase(flow_id);
-        Settings::flowId2Port2Src.erase(flow_id);
-        Settings::FlowId2SrcId.erase(flow_id);
-        Settings::FlowId2Length.erase(flow_id);
-        Settings::QPPair_info2FlowId.erase(qp_info);
-        finishedQpBuffer.pop();
-        //printf("Flow %u cleared! current queue size:%d\n", flow_id, finishedQpBuffer.size());
-    }
+    // static std::queue<std::tuple<Ipv4Address, Ipv4Address, uint16_t, uint16_t>> finishedQpBuffer; //这个buffer存放将要被清理的flow。但是我们不能立即清理，因为在乱序状态下依旧可能有部分包残存在拓扑中
+    // // uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(sid, did, q->sport, q->dport)];
+    // uint32_t flow_id = q->m_flow_id;
+    // fprintf(packetId2FlowId, "FlowKey: (%u %u %u %u) -> FlowId: %u\n", sid, did, q->sport, q->dport, flow_id);
+    // finishedQpBuffer.push(std::make_tuple(q->sip, q->dip, static_cast<uint16_t>(q->sport), static_cast<uint16_t>(q->dport)));
+    // if (finishedQpBuffer.size() > 100000) {
+    //     auto& qp_info = finishedQpBuffer.front();
+    //     uint32_t flow_id = Settings::QPPair_info2FlowId[qp_info];    
+    //     Settings::PacketId2FlowId.erase(std::make_tuple(Settings::ip_to_node_id(std::get<0>(qp_info)), Settings::ip_to_node_id(std::get<1>(qp_info)), std::get<2>(qp_info), std::get<3>(qp_info)));
+    //     Settings::flowId2SrcDst.erase(flow_id);
+    //     Settings::flowId2Port2Src.erase(flow_id);
+    //     Settings::FlowId2SrcId.erase(flow_id);
+    //     Settings::FlowId2Length.erase(flow_id);
+    //     Settings::QPPair_info2FlowId.erase(qp_info);
+    //     finishedQpBuffer.pop();
+    //     //printf("Flow %u cleared! current queue size:%d\n", flow_id, finishedQpBuffer.size());
+    // }
     fflush(stdin);
 }
 
@@ -1357,6 +1361,28 @@ void SetBestPathCETables(){
         }
     }
 }
+void SetBestPathCETables_ToR(){
+    Time now = Simulator::Now();
+    
+    // 遍历所有交换机节点
+    for (auto i = nextHop.begin(); i != nextHop.end(); i++){
+        Ptr<Node> node = i->first;
+        if (node->GetNodeType() == 1){  // 如果是交换机
+            Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(node);
+            
+            // 遍历所有目的ToR交换机
+            for (const auto& torPair : idxNodeToR) {
+                uint32_t torId = torPair.first;
+                
+                // 不为自己设置表项
+                if (sw->GetId() != torId) {
+                    sw->AddBestPathCETableEntry_ToR(torId, now);
+                }
+            }
+        }
+    }
+}
+
 void SetBestPathCETables_noshare(){
     Time now = Simulator::Now();
     for (auto i = nextHop.begin(); i != nextHop.end(); i++){
@@ -1394,6 +1420,32 @@ void SetACCPathCETables(){
         }
     }
 }
+void SetACCPathCETables_ToR(){
+    Time now = Simulator::Now();
+    
+    // 遍历所有交换机节点
+    for (auto i = nextHop.begin(); i != nextHop.end(); i++){
+        Ptr<Node> node = i->first;
+        if (node->GetNodeType() == 1){  // 如果是交换机
+            Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(node);
+            
+            // 只为非ToR交换机（中间层交换机）设置表项
+            if(sw->m_isToR == false){
+                // 遍历所有目的ToR交换机
+                for (const auto& torPair : idxNodeToR) {
+                    uint32_t torId = torPair.first;
+                    
+                    // 不为自己设置表项（虽然中间交换机不是ToR，但为了一致性）
+                    if (sw->GetId() != torId) {
+                        sw->AddACCPathCETableEntry_ToR(torId, now);
+                    }
+                }
+            }
+        }
+    }
+}
+
+
 void SetACCPathCETables_noshare(){
         Time now = Simulator::Now();
     for (auto i = nextHop.begin(); i != nextHop.end(); i++){
@@ -1455,6 +1507,78 @@ void SetPerHopCaverTables(){
         printf("SetPerHopCaverTables finished\n");
     }
 }
+void SetPerHopCaverTables_ToR(){
+    if (init_log) {
+        printf("SetPerHopCaverTables_ToR begin\n");
+    }
+    
+    // 遍历所有交换机节点
+    for (auto i = nextHop.begin(); i != nextHop.end(); i++){
+        Ptr<Node> node = i->first;
+        if (node->GetNodeType() == 1){  // 如果是交换机
+            Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(node);
+            auto &table = i->second;
+            
+            // 为每个目的ToR设置per-hop caver表项
+            for (const auto& torPair : idxNodeToR) {
+                uint32_t torId = torPair.first;
+                
+                // 不为自己设置表项
+                if (sw->GetId() != torId) {
+                    // 找到这个ToR下面的一个host
+                    Ptr<Node> target_host = nullptr;
+                    for (auto j = table.begin(); j != table.end(); j++){
+                        Ptr<Node> dst = j->first;
+                        if (dst->GetNodeType() == 0) {  // 如果目标是主机
+                            uint32_t dstIP = Settings::hostId2IpMap[dst->GetId()];
+                            // 检查这个host是否连接到目标ToR
+                            auto tor_it = std::find(Settings::hostId2ToRlist[dst->GetId()].begin(), 
+                                                   Settings::hostId2ToRlist[dst->GetId()].end(), torId);
+                            if (tor_it != Settings::hostId2ToRlist[dst->GetId()].end()) {
+                                target_host = dst;
+                                break;  // 找到一个就够了
+                            }
+                        }
+                    }
+                    
+                    if (target_host != nullptr) {
+                        // 获取到达该host(代表ToR)的所有端口
+                        std::vector<uint32_t> ports;
+                        auto host_it = table.find(target_host);
+                        if (host_it != table.end()) {
+                            vector<Ptr<Node>> nexts = host_it->second;
+                            for (int k = 0; k < (int)nexts.size(); k++) {
+                                Ptr<Node> nextHop_node = nexts[k];
+                                auto it = nbr2if[node].find(nextHop_node);
+                                if (it != nbr2if[node].end() && it->second.up) {
+                                    ports.push_back(it->second.idx);
+                                }
+                            }
+                            
+                            // 初始化per-hop caver表项
+                            if (!ports.empty()) {
+                                sw->AddPerHopCaverTableEntry(torId, ports);
+                                
+                                printf("Switch %u -> ToR %u: ports [", sw->GetId(), torId);
+                                for (size_t p = 0; p < ports.size(); p++) {
+                                    printf("%u", ports[p]);
+                                    if (p < ports.size() - 1) printf(", ");
+                                }
+                                printf("] (via host %u)\n", target_host->GetId());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (init_log) {
+        printf("SetPerHopCaverTables_ToR finished\n");
+    }
+}
+
+
 
 void SetPathChoiceTables(){
     Time now = Simulator::Now();
@@ -1473,6 +1597,30 @@ void SetPathChoiceTables(){
                 }else{
                     if(sw->m_isToR == true){
                         sw->AddPathChoiceTableEntry(dstAddr, now);
+                    }
+                }
+            }
+        }
+    }
+}
+void SetPathChoiceTables_ToR(){
+    Time now = Simulator::Now();
+    
+    // 遍历所有交换机节点
+    for (auto i = nextHop.begin(); i != nextHop.end(); i++){
+        Ptr<Node> node = i->first;
+        if (node->GetNodeType() == 1){  // 如果是交换机
+            Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(node);
+            
+            // 只为ToR交换机设置表项
+            if (sw->m_isToR) {
+                // 遍历所有其他ToR交换机作为目标
+                for (const auto& torPair : idxNodeToR) {
+                    uint32_t torId = torPair.first;
+                    
+                    // 不为自己设置表项
+                    if (sw->GetId() != torId) {
+                        sw->AddPathChoiceTableEntry_ToR(torId, now);
                     }
                 }
             }
@@ -1644,6 +1792,9 @@ int main(int argc, char *argv[]) {
                 conf >> v;
                 caver_perHop_path_select = v;
                 std::cerr << "CAVER_PERHOP_PATH_SELECT\t\t" << caver_perHop_path_select << "\n";
+            } else if (key.compare("CAVER_THRESHOLD_METHODS") == 0) {
+                conf >> caver_threshold_methods;
+                fflush(stdout);
             } else if (key.compare("QP_STAT_OUTPUT_FILE") == 0) {
                 conf >> qp_stat_output_file;
                 std::cerr << "QP_STAT_OUTPUT_FILE\t\t" << qp_stat_output_file << "\n";
@@ -2438,7 +2589,7 @@ int main(int argc, char *argv[]) {
     qp_stat_output = fopen(qp_stat_output_file.c_str(), "w");
     if (qp_stat_output) {
         // 写入文件头部
-        fprintf(qp_stat_output, "# flow_id src_id dst_id sport dport original_size actual_data_bytes actual_total_bytes packet_count start_time end_time duration\n");
+        fprintf(qp_stat_output, "# flow_id src_id dst_id sport dport original_size actual_data_bytes actual_total_bytes packet_count start_time end_time duration max_OOO_packets\n");
         
         // 设置到 RdmaHw
         RdmaHw::SetQpStatFile(qp_stat_output);
@@ -2626,10 +2777,6 @@ int main(int argc, char *argv[]) {
     }
     
     if (lb_mode == 20 || packet_lb_mode == 20){
-        SetPathChoiceTables();
-        SetBestPathCETables();
-        SetACCPathCETables();
-        SetPerHopCaverTables();
         std::cout << "SetPathChoiceTables, SetBestPathCETables, SetACCPathCETables, SetPerHopCaverTables" << std::endl;
         fflush(stdout);
 
@@ -2715,12 +2862,47 @@ int main(int argc, char *argv[]) {
             };
         }
     }
+    //init TorSwitch_nodelist, hostId2ToRlist, SrcId2CurSrcToR
+    if (lb_mode == 3 || lb_mode == 6 || lb_mode == 9 || lb_mode == 10 || lb_mode == 12 || lb_mode == 20 || packet_lb_mode == 20) {
+        for (auto &pair : link_pairs) {
+            Ptr<Node> probably_host = n.Get(pair.first);
+            Ptr<Node> probably_switch = n.Get(pair.second);
 
+            // host-switch link
+            if (probably_host->GetNodeType() == 0 && probably_switch->GetNodeType() == 1) {
+                Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(probably_switch);
+                uint32_t hostIP = serverAddress[pair.first].Get();
+                uint32_t hostId = Settings::hostIp2IdMap[hostIP];
+                auto dstIter = Settings::TorSwitch_nodelist.find(sw->GetId());
+                if (dstIter == Settings::TorSwitch_nodelist.end()) {
+                    // 如果不存在，则创建一个新的条目
+                    Settings::TorSwitch_nodelist[sw->GetId()] = std::vector<uint32_t>();
+                }
+                Settings::TorSwitch_nodelist[sw->GetId()].push_back(hostIP);
+
+                auto hostIter = Settings::hostId2ToRlist.find(hostId);
+                if (hostIter == Settings::hostId2ToRlist.end()) {
+                    // 如果不存在，则创建一个新的条目
+                    Settings::hostId2ToRlist[hostId] = std::vector<uint32_t>();
+                }
+                Settings::hostId2ToRlist[hostId].push_back(sw->GetId());
+                SrcId2CurSrcToR[probably_host->GetId()] = 0;
+            }
+        } 
+    }
     if (lb_mode == 20 || packet_lb_mode == 20){
-        SetPathChoiceTables();
-        SetBestPathCETables();
-        SetACCPathCETables();
-        SetPerHopCaverTables();  // 新增调用
+        if (ToR_info){
+            SetBestPathCETables_ToR();
+            SetPathChoiceTables_ToR();
+            SetACCPathCETables_ToR();
+            SetPerHopCaverTables_ToR();
+
+        }else{
+            SetPathChoiceTables();
+            SetBestPathCETables();
+            SetACCPathCETables();
+            SetPerHopCaverTables();
+        }
         if (init_log){
             printf("This is init table logging\n");
             for (auto i = nextHop.begin(); i != nextHop.end(); i++){
@@ -2769,34 +2951,6 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
-    }
-    //init TorSwitch_nodelist, hostId2ToRlist, SrcId2CurSrcToR
-    if (lb_mode == 3 || lb_mode == 6 || lb_mode == 9 || lb_mode == 10 || lb_mode == 12 || lb_mode == 20 || packet_lb_mode == 20) {
-        for (auto &pair : link_pairs) {
-            Ptr<Node> probably_host = n.Get(pair.first);
-            Ptr<Node> probably_switch = n.Get(pair.second);
-
-            // host-switch link
-            if (probably_host->GetNodeType() == 0 && probably_switch->GetNodeType() == 1) {
-                Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(probably_switch);
-                uint32_t hostIP = serverAddress[pair.first].Get();
-                uint32_t hostId = Settings::hostIp2IdMap[hostIP];
-                auto dstIter = Settings::TorSwitch_nodelist.find(sw->GetId());
-                if (dstIter == Settings::TorSwitch_nodelist.end()) {
-                    // 如果不存在，则创建一个新的条目
-                    Settings::TorSwitch_nodelist[sw->GetId()] = std::vector<uint32_t>();
-                }
-                Settings::TorSwitch_nodelist[sw->GetId()].push_back(hostIP);
-
-                auto hostIter = Settings::hostId2ToRlist.find(hostId);
-                if (hostIter == Settings::hostId2ToRlist.end()) {
-                    // 如果不存在，则创建一个新的条目
-                    Settings::hostId2ToRlist[hostId] = std::vector<uint32_t>();
-                }
-                Settings::hostId2ToRlist[hostId].push_back(sw->GetId());
-                SrcId2CurSrcToR[probably_host->GetId()] = 0;
-            }
-        } 
     }
     //idxNodeToR: save Tor switch, idxNodeToR[sw->GetId()] = sw;
     if (lb_mode == 9 || lb_mode == 3 || lb_mode == 6){
@@ -3084,7 +3238,7 @@ int main(int argc, char *argv[]) {
                                                            caver_flowletTimeout, caver_quantizeBit,
                                                            caver_alpha, caver_ce_threshold, caver_patchoiceTimeout,
                                                             caver_pathChoice_num, caver_tau, caver_useEWMA, caver_per_host_routing, 
-                                                            caver_per_host_routing_scheme, caver_metric_choice, caver_data_backup_route, caver_ack_route, caver_perHop_path_select);
+                                                            caver_per_host_routing_scheme, caver_metric_choice, caver_data_backup_route, caver_ack_route, caver_perHop_path_select, caver_threshold_methods);
                 sw->m_mmu->m_caverRouting.SetSwitchInfo(sw->m_isToR, sw->GetId());
                 // dive into related
             }

@@ -23,8 +23,8 @@ def write_range_line(k, output_file):
         f.write(line + "\n")
 
 if __name__ == "__main__":
-    input_path = "L_24.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow.txt"
-    output_path = "L_24.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_flow.txt"
-    SR_output_path = "L_24.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_flow_SR_host.txt"
+    input_path = "L_40.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow.txt"
+    output_path = "L_40.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_flow.txt"
+    SR_output_path = "L_40.00_CDF_AliStorage2019_N_256_T_30ms_B_100_flow_all_flow_SR_host.txt"
     modify_file(input_path, output_path)
     write_range_line(255, SR_output_path)

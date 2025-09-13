@@ -87,6 +87,7 @@ CAVER_METRIC_CHOICE {metric_choice}
 CAVER_DATA_BACKUP_ROUTE {data_backup_route}
 CAVER_ACK_ROUTE {ack_route}
 CAVER_PERHOP_PATH_SELECT {perHop_path_select}
+CAVER_THRESHOLD_METHODS {threshold_methods}
 
 ALPHA_RESUME_INTERVAL 1
 RATE_DECREASE_INTERVAL 4
@@ -242,13 +243,13 @@ def main():
     # parser.add_argument('--cwh_tx_expiry_time', dest='cwh_tx_expiry_time', action='store',
     #                     type=int, default=1000, help="timeout value of ConWeave Tx for CLEAR signal (default: 1000us)")
     parser.add_argument('--caver_dreTime', dest='caver_dreTime', action='store',
-                        type=int, default=30, help="Caver DRE Time (default: 30us)")
+                        type=int, default=15, help="Caver DRE Time (default: 30us)")
     parser.add_argument('--caver_alpha', dest='caver_alpha', action='store',
                         type=float, default=0.3, help="Caver Alpha value (default: 0.3)")
     parser.add_argument('--caver_ce_threshold', dest='caver_ce_threshold', action='store',
                         type=float, default=1.3, help="Caver CE Threshold (default: 1.3)")
     parser.add_argument('--caver_patchoiceTimeout', dest='caver_patchoiceTimeout', action='store',
-                        type=int, default=50, help="Caver Patchoice Timeout (default: 50us)")
+                        type=int, default=200, help="Caver Patchoice Timeout (default: 200us)")
     parser.add_argument('--caver_pathChoice_num', dest='caver_pathChoice_num', action='store',
                         type=int, default=4, help="Caver Path Choice Number (default: 4)")
     parser.add_argument('--caver_tau', dest='caver_tau', action='store',
@@ -278,8 +279,10 @@ def main():
     parser.add_argument('--ack_route', dest='ack_route', action='store',
             type=int, default=2, help="ack route choice: 0: ECMP, 1: greedy, 2: oblivious (default: 2)")
     parser.add_argument('--perHop_path_select', dest='perHop_path_select', action='store',
-            type=int, default=2, help="enable per-hop path select: 0=disable, 1=enable (default: 2)")
-
+            type=int, default=0, help="Route Choice: 0:best, 1:random select, 2:only_best select, 3 local Dre, 4 poer-of-2")
+    # 在 run.py 的参数解析部分添加
+    parser.add_argument('--threshold_methods', dest='threshold_methods', action='store',
+        type=int, default=1, help="Threshold calculation methods: 0=(255-x)*th, 1=x*th, 2=x+th (default: 1)")
     args = parser.parse_args()
 
     config_index = 0
@@ -335,6 +338,7 @@ def main():
     data_backup_route = int(args.data_backup_route)
     ack_route = int(args.ack_route)
     perHop_path_select = int(args.perHop_path_select)
+    threshold_methods = int(args.threshold_methods)
 
     # get over-subscription ratio from topoogy name
 
@@ -526,7 +530,7 @@ def main():
                                         enabled_pfc=enabled_pfc, enabled_irn=enabled_irn, enable_sr=enabled_sr,
                                         sr_timeout=sr_timeout, sr_window=sr_window,sr_host_file=sr_host_file if sr_host_file != '' else ("config/" + flow + "_SR_host.txt"),
                                         cc_mode=cc_mode,cc_enabled = cc_enabled, metric_choice=metric_choice, 
-                                        data_backup_route=data_backup_route, ack_route=ack_route, perHop_path_select=perHop_path_select, 
+                                        data_backup_route=data_backup_route, ack_route=ack_route, perHop_path_select=perHop_path_select, threshold_methods=threshold_methods,
                                         per_host_routing=per_host_routing, per_host_routing_scheme=per_host_routing_scheme,  # 新增参数
                                         ai=ai, hai=hai, dctcp_ai=dctcp_ai,
                                         has_win=has_win, var_win=var_win,

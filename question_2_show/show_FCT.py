@@ -28,13 +28,14 @@ def get_LB_mode(file_path):
     return lb_mode, packet_lb_mode
 
 
-def read_fct_slowdowns(file_path, time_start, time_end):
+def read_fct_slowdowns(file_path, time_start, time_end, max_lines=float('inf')):
     """
     读取符合时间范围要求的流完成时间 (FCT) slowdown 和 FCT 绝对值，并计算平均值。
 
     :param file_path: 文件路径
     :param time_start: 起始时间（纳秒）
     :param time_end: 结束时间（纳秒）
+    :param max_lines: 最大读取行数，默认为无限大
     :return: flow_avg_slowdown, packet_avg_slowdown, total_avg_slowdown, flow_count, packet_count, total_count,
              flow_avg_fct, packet_avg_fct, total_avg_fct, flow_slowdowns, packet_slowdowns, total_slowdowns,
              flow_fcts, packet_fcts, total_fcts
@@ -46,10 +47,23 @@ def read_fct_slowdowns(file_path, time_start, time_end):
     flow_fct_data = []
     packet_fct_data = []
     total_fct_data = []
+    
+    lines_read = 0
 
     try:
         with open(file_path, 'r') as file:
             for line in file:
+                # 检查是否达到最大行数限制
+                if lines_read >= max_lines:
+                    print(f"Reached maximum line limit ({max_lines}), stopping read.")
+                    break
+                    
+                lines_read += 1
+                
+                # 显示进度（每10000行）
+                # if lines_read % 10000 == 0:
+                #     print(f"Read {lines_read} lines...")
+                
                 fields = line.split()
                 if len(fields) < 8:
                     continue
@@ -88,6 +102,11 @@ def read_fct_slowdowns(file_path, time_start, time_end):
         packet_avg_fct = sum(packet_fct_data) / packet_count / 1000 if packet_count > 0 else 0.0
         total_avg_fct = sum(total_fct_data) / total_count / 1000 if total_count > 0 else 0.0
 
+        # 输出读取信息
+        print(f"Successfully read {lines_read} lines from {file_path}")
+        if lines_read == max_lines:
+            print(f"Stopped at maximum line limit ({max_lines})")
+
         return (flow_avg_slowdown, packet_avg_slowdown, total_avg_slowdown, 
                 flow_count, packet_count, total_count,
                 flow_avg_fct, packet_avg_fct, total_avg_fct,
@@ -96,8 +115,69 @@ def read_fct_slowdowns(file_path, time_start, time_end):
     
     except IOError as e:
         print("Error reading file:", e)
-        return (0.0, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0.0, [], [], [], [], [], [])                    
+        return (0.0, 0.0, 0.0, 0, 0, 0, 0.0, 0.0, 0.0, [], [], [], [], [], [])                   
+def get_average_max_OOO(file_path, max_lines=float('inf')):
+    """
+    读取QP统计文件，计算最后一列数据的平均值（跳过第一行标题）
+    
+    :param file_path: 文件路径
+    :param max_lines: 最大读取行数，默认为无限大
+    :return: 最后一列数据的平均值
+    """
+    max_ooo_values = []
+    lines_read = 0
+    data_lines_read = 0
+    
+    try:
+        with open(file_path, 'r') as file:
+            for line_num, line in enumerate(file):
+                # 检查是否达到最大行数限制
+                if lines_read >= max_lines:
+                    print(f"Reached maximum line limit ({max_lines}), stopping read.")
+                    break
+                    
+                lines_read += 1
+                
+                # 跳过第一行（标题行）
+                if line_num == 0:
+                    continue
+                
+                # 显示进度（每10000行）
+                # if data_lines_read % 10000 == 0 and data_lines_read > 0:
+                #     print(f"Read {data_lines_read} data lines...")
+                
+                # 处理数据行
+                line = line.strip()
+                if line:  # 跳过空行
+                    fields = line.split()
+                    if len(fields) > 0:
+                        try:
+                            # 获取最后一列的数值
+                            last_value = float(fields[-1])
+                            max_ooo_values.append(last_value)
+                            data_lines_read += 1
+                        except ValueError:
+                            # 如果最后一列不是数字，跳过这一行
+                            print(f"Warning: Cannot parse last field '{fields[-1]}' as number in line {line_num + 1}")
+                            continue
 
+        # 计算平均值
+        if max_ooo_values:
+            average_max_ooo = sum(max_ooo_values) / len(max_ooo_values)
+            print(f"Successfully read {data_lines_read} data lines from {file_path}")
+            if lines_read == max_lines:
+                print(f"Stopped at maximum line limit ({max_lines})")
+            return average_max_ooo
+        else:
+            print(f"Warning: No valid data found in {file_path}")
+            return 0.0
+    
+    except IOError as e:
+        print(f"Error reading file {file_path}: {e}")
+        return 0.0
+    except Exception as e:
+        print(f"Unexpected error processing {file_path}: {e}")
+        return 0.0
 
 def plot_cdf(data, title, xlabel, filename, color='blue'):
     """
@@ -226,10 +306,15 @@ LB_mode = {
 ######全部逐包 load 80:
 # name_list = ["[344]-09-12-09:00:23-fecmp-80", "[341]-09-12-08:58:44-caver-80", "[343]-09-12-08:59:42-fecmp-80", "[342]-09-12-08:59:11-fecmp-80"]
 ######全部逐包 load 80 OS1 topo:
-name_list = ["[353]-09-12-12:57:45-caver-80", "[354]-09-12-13:05:01-fecmp-80","[345]-09-12-09:40:26-caver-80", "[346]-09-12-09:42:10-greedy-80", "[349]-09-12-09:43:45-fecmp-80", "[350]-09-12-09:44:13-fecmp-80"]
+# name_list = ["[353]-09-12-12:57:45-caver-80", "[354]-09-12-13:05:01-fecmp-80","[345]-09-12-09:40:26-caver-80", "[346]-09-12-09:42:10-greedy-80", "[349]-09-12-09:43:45-fecmp-80", "[350]-09-12-09:44:13-fecmp-80"]
 ###### 全部逐包 ununiform load 48
 # name_list = ["[333]-09-10-23:26:29-caver-48", "[334]-09-10-23:27:57-fecmp-48", "[335]-09-10-23:28:21-fecmp-48", "[336]-09-10-23:28:47-fecmp-48"]
-
+###### perToR CAVER large window 
+# name_list = ["[387]-09-13-11:39:40-caver-80", "[388]-09-13-11:40:18-caver-80"]
+###### seveal test
+# name_list = ["[408]-09-13-19:08:53-caver-80", "[409]-09-13-19:09:23-caver-80", "[410]-09-13-19:09:56-caver-80", "[411]-09-13-19:10:52-caver-80", "[412]-09-13-19:11:32-caver-60", "[405]-09-13-15:07:22-caver-60", "[413]-09-13-19:12:24-caver-60", "[407]-09-13-15:08:29-caver-60"]
+###### threshold
+name_list = ["[422]-09-13-22:23:27-caver-80", "[423]-09-13-22:23:56-caver-80", "[424]-09-13-22:24:12-caver-80", "[425]-09-13-22:49:48-caver-80"]
 output_dir = "cdf_plots"
 if not os.path.exists(output_dir):
     os.makedirs(output_dir, exist_ok=True)
@@ -255,6 +340,7 @@ folder = "/home/denghaotian/research/Out_of_Order/ns-allinone-3.19/ns-3.19/mix/o
 for name in name_list:
     fct_path = folder + f"/{name}/{name}_out_fct.txt"
     config_path = folder + f"/{name}/config.txt"
+    qp_path = folder + f"/{name}/{name}_out_qp_stat.txt"
     flow_LB_mode, packet_LB_mode = get_LB_mode(config_path)
     flow_level_ratio = 0.15 ###这个与/traffic_gen/traffic_gen.py 中的134行一致
     load = int(name.split("-")[-1])
@@ -267,12 +353,16 @@ for name in name_list:
      flow_slowdowns, packet_slowdowns, total_slowdowns,
      flow_fcts, packet_fcts, total_fcts) = read_fct_slowdowns(fct_path, time_start, time_end)
     
+    average_max_ooo = get_average_max_OOO(qp_path)
+    
+    
     print(f"\n=== {name} ===")
     print(f"Flow LB Mode: {LB_mode[flow_LB_mode]}, Packet LB Mode: {LB_mode[packet_LB_mode]}")
     print(f"Flow Count: {flow_count}, Packet Count: {packet_count}, Total Count: {total_count}")
     print(f"Flow Average Slowdown: {flow_avg_slowdown:.3f}, Packet Average Slowdown: {packet_avg_slowdown:.3f}, Total Average Slowdown: {total_avg_slowdown:.3f}")
     print(f"Flow Average FCT: {flow_avg_fct:.2f}μs, Packet Average FCT: {packet_avg_fct:.2f}μs, Total Average FCT: {total_avg_fct:.2f}μs")
-    
+    print(f"Average Max OOO: {average_max_ooo:.3f}")
+        
     # 绘制 FCT Slowdown CDF
     if len(flow_slowdowns) > 0:
         plot_cdf(flow_slowdowns, 

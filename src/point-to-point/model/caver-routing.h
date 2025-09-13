@@ -192,7 +192,8 @@ class CaverRouting : public Object {
                       uint32_t metricChoice,
                       uint32_t dataBackupRoute,      // 新增参数
                       uint32_t ackRoute,
-                      uint32_t perHopPathSelect);       // 新增参数
+                      uint32_t perHopPathSelect,
+                    uint32_t thresholdMethods);       // 新增参数
     void SetSwitchInfo(bool isToR, uint32_t switch_id);
     void SetLinkCapacity(uint32_t outPort, uint64_t bitRate);
 
@@ -252,6 +253,7 @@ class CaverRouting : public Object {
     bool show_acceptable_detail = false;// Display detailed information from acceptable table
     //method
     bool ToR_Rouding = true;
+    bool ToR_info = true;
 
     uint32_t m_pathChoice_num; // Number of paths stored in each destination of the PathChoiceTable
 
@@ -261,14 +263,15 @@ class CaverRouting : public Object {
     uint32_t metric_choice = 1; // 0: DRE, 1: queue; ACK piggyback information
 
     uint32_t perHop_path_select = 1; //0:best, 1:good_only_store random select, 2:good_only_store best select//关于path_hopTable中怎么存信息
+                                    //3:localDre, 4:power of two;
+    uint32_t threshold_methods = 1; //0: (255-x)*th, 1: x * th, 2: x + th
 
             // per-host routing 
     bool per_host_routing = true;
     uint32_t per_host_routing_scheme = 1; // 0: like caver, 1: per-host dynamic 
     void Update_PathChoiceTable(ns3::CaverAckTag& ackTag, uint32_t& localCE,
                                               uint32_t& currentBestCE, uint32_t totalBestCE,
-                                              uint32_t& host_ip, uint32_t inPort, ns3::Time& now,
-                                              uint32_t host_id);
+                                              uint32_t& table_index, uint32_t inPort, ns3::Time& now);
         // 新增：per-hop caver相关函数
     void InitPerHopCaverTable(uint32_t host_id, const std::vector<uint32_t>& ports);
     void UpdatePerHopCaverInfo(uint32_t host_id, uint32_t port, uint32_t remoteCE, Time updateTime);
@@ -277,18 +280,23 @@ class CaverRouting : public Object {
     void PerHopAgingEvent();
     void SetPerHopAgingTime(Time agingTime);
 
-    uint32_t ChooseNextHopByPerHopCaver(uint32_t host_id);
+    uint32_t ChooseNextHopByPerHopCaver(uint32_t host_id, bool show);
     uint32_t ChooseNextHopByPerHopCaverWithQueue(uint32_t host_id);
     uint32_t ChooseNextHopByPerHopCaver_valid(uint32_t host_id);
     uint32_t ChooseNextHopByPerHopCaver_best(uint32_t host_id);
+    uint32_t ChooseNextHopByLocalDre(uint32_t host_id);
+    uint32_t ChooseNextHopByPerHopCaver_random2(uint32_t host_id, bool show);
 
     void SetGetPortQueueLengthCallback(GetPortQueueLengthCallback callback);
     uint32_t GetPortTotalQueueLength(uint32_t port);
     uint32_t GetMinValidMetricWithQueueLength(uint32_t host_id);
     void LogPerHopCaverChoice(uint32_t host_id, const std::map<uint32_t, PerHopCaverInfo>& port_map);
+    uint32_t GetPortQuanDre(uint32_t port);
     bool Perhop_log = false;
     bool Perhop_debug_log = false;
     bool topo_log = true;
+    bool SR_debug_log = true;
+
     
     private:
         SwitchSendCallback m_switchSendCallback;  // bound to SwitchNode::SwitchSend (for Request/UDP)

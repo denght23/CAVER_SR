@@ -9,6 +9,8 @@
 #include "ns3/simulator.h"
 #include <queue>
 #include <unordered_map>
+#include "ns3/flow-id-num-tag.h"
+#include <assert.h>
 
 namespace ns3 {
 /* helper function */
@@ -212,7 +214,7 @@ void Settings::record_flow_distribution(Ptr<Packet> p, CustomHeader &ch, Ptr<Nod
     if (dstId == Settings::hostIp2IdMap[ch.dip]) {
         return;
     }
-    uint32_t flowId = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+    uint32_t flowId = Settings::get_flowid(p);
     //printf("[%ld]%u -> %u, Flow:%u, Seq:%u\n", Simulator::Now().GetNanoSeconds(), srcId, dstId, flowId, ch.udp.seq);
     //flowRecorder[linkKey][flowId] = Simulator::Now();
     linkRecorder[linkKey].total_size += p->GetSize();
@@ -409,4 +411,15 @@ void Settings::read_static_path(std::string path){
     }
     infile.close();
 }
+uint32_t Settings::get_flowid(Ptr<const Packet> p) {
+    FlowIDNUMTag fit;
+    if (p->PeekPacketTag(fit)) {
+        return fit.GetId();
+    } else {
+        assert(false);
+        return 0xFFFFFFFF;
+    }
+}
+
+
 }  // namespace ns3

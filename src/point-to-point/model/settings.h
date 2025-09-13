@@ -120,7 +120,6 @@ struct m_FlowInput {
     uint32_t src, dst, pg, fsize, sport, dport;
     double start_time, finish_time = 0;
     uint32_t idx;
-    uint32_t srcTor, dstTor;
     bool isFinished = false;
     bool reorderable = false;
     uint32_t max_ooo_degree = 0;
@@ -275,8 +274,9 @@ class Settings {
 
     // 重排内容 by zyf
     static std::unordered_map<std::tuple<uint32_t, uint32_t, uint16_t, uint16_t>, bool, Settings::tuple_hash> reorderable; // 记录每个流是否支持重排，四元组：sip, dip, sport, dport
-
-   private:
+    static uint32_t get_flowid(Ptr<const Packet> p);
+   
+    private:
     
     static std::unordered_map<uint64_t, std::unordered_map<uint32_t, Time>> flowRecorder; //(src,dst)->(flow_id, active_time)
     struct LinkRecord {

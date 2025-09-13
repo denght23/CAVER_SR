@@ -110,11 +110,14 @@ class SwitchNode : public Node {
     void AddPathCE_port_TableEntry(Ipv4Address &dstAddr, uint32_t intf_idx, Time now);
     void AddPathCETableEntry(Ipv4Address &dstAddr, Time now);
     void AddPathChoiceTableEntry(Ipv4Address &dstAddr, Time now);
+    void AddPathChoiceTableEntry_ToR(uint32_t ToR_id, Time now);
+    void AddBestPathCETableEntry_ToR(uint32_t ToR_id, Time now);
     void AddPathChoiceTableEntry_noshare(Ipv4Address &dstAddr, Time now);
     void AddBestPathCETableEntry_noshare(Ipv4Address &dstAddr, Time now);
     void AddACCPathCETableEntry_noshare(Ipv4Address &dstAddr, Time now);
     void AddBestPathCETableEntry(Ipv4Address &dstAddr, Time now);
     void AddACCPathCETableEntry(Ipv4Address &dstAddr, Time now);
+    void AddACCPathCETableEntry_ToR(uint32_t ToR_id, Time now);
     
     void AddPerHopCaverTableEntry(uint32_t host_id, const std::vector<uint32_t>& ports);
     // *******************************Add end**********************//

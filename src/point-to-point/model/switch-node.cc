@@ -267,7 +267,7 @@ uint32_t SwitchNode::DoLbGreedy(Ptr<const Packet> p, const CustomHeader &ch,
     uint32_t leastLoad = std::numeric_limits<uint32_t>::max();
     
     if (reorder_log) {
-        uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+        uint32_t flow_id = Settings::get_flowid(p);
         std::cout << "[DoLbGreedy-ENTRY] switch_id=" << m_id 
                   << " flow_id=" << flow_id 
                   << " nexthops_count=" << nexthops.size() << std::endl;
@@ -311,7 +311,6 @@ uint32_t SwitchNode::DoLbGreedy(Ptr<const Packet> p, const CustomHeader &ch,
         selectedPort = leastLoadInterfaces[randomIndex];
         
         if (reorder_log) {
-            uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
             std::cout << " [TIED_PORTS: " << leastLoadInterfaces.size() 
                       << " ports with load=" << leastLoad 
                       << ", randomly_selected_index=" << randomIndex << "]";
@@ -320,7 +319,6 @@ uint32_t SwitchNode::DoLbGreedy(Ptr<const Packet> p, const CustomHeader &ch,
     
     // 日志记录：显示最终选择的端口
     if (reorder_log) {
-        uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
         std::cout << " -> selected_port=" << selectedPort 
                   << " with_load=" << leastLoad;
         if (leastLoadInterfaces.size() > 1) {
@@ -340,7 +338,7 @@ uint32_t SwitchNode::DoLbOblivious(Ptr<const Packet> p, const CustomHeader &ch,
     
     // 使用均匀分布随机选择
     if (reorder_log) {
-        uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+        uint32_t flow_id = Settings::get_flowid(p);
         std::cout << "[DoLbOblivious-ENTRY] switch_id=" << m_id 
                   << " flow_id=" << flow_id 
                   << " nexthops_count=" << nexthops.size() << std::endl;
@@ -351,7 +349,7 @@ uint32_t SwitchNode::DoLbOblivious(Ptr<const Packet> p, const CustomHeader &ch,
     
     size_t randomIndex = dis(gen);
     if (reorder_log) {
-        uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+        uint32_t flow_id = Settings::get_flowid(p);
         std::cout << "[DoLbOblivious-RESULT] switch_id=" << m_id 
                   << " flow_id=" << flow_id 
                   << " random_index=" << randomIndex
@@ -448,7 +446,7 @@ bool SwitchNode::SwitchReceiveFromDevice(Ptr<NetDevice> device, Ptr<Packet> pack
         //     headSet.insert(head);
         //     std::cout << "flow passed:" <<head << std::endl;
         // }
-        uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+        uint32_t flow_id = Settings::get_flowid(packet);
         // std::cout << "Flow ID: " << flow_id << std::endl;
         if (flow_bytes.find(flow_id) == flow_bytes.end()) {
             //std::cout << "flow_passed: " << "switch_id "  <<  m_id << " flow_id "<< flow_id << std::endl;
@@ -493,17 +491,12 @@ void SwitchNode::SendToDev(Ptr<Packet> p, CustomHeader &ch) {
     if (!m_GlobaldreEvent.IsRunning()){
         m_GlobaldreEvent = Simulator::Schedule(Settings::Dre_time_map[GetId()], &SwitchNode::GlobalDreEvent, this);
     }
-    std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key = std::make_tuple(ch.sip, ch.dip, ch.udp.sport, ch.udp.dport);
-    auto it = Settings::reorderable.find(flow_key);
-    bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
+    bool flow_reorderable = Settings::flow_info[Settings::get_flowid(p)].reorderable;
     
     uint32_t flow_id = 0;
     
     if (reorder_log && ch.l3Prot == 0x11) {
-        auto flow_it = Settings::PacketId2FlowId.find(std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport));
-        if (flow_it != Settings::PacketId2FlowId.end()) {
-            flow_id = flow_it->second;
-        }
+        uint32_t flow_id = Settings::get_flowid(p);
         std::cout << "[SendToDev-ENTRY] switch_id=" << m_id 
                   << " flow_id=" << flow_id 
                   << " reorderable=" << (flow_reorderable ? "true" : "false")
@@ -588,10 +581,8 @@ void SwitchNode::SendToDev(Ptr<Packet> p, CustomHeader &ch) {
 void SwitchNode::SendToDevContinue(Ptr<Packet> p, CustomHeader &ch) {
     uint32_t flow_id = 0;
     if (reorder_log && ch.l3Prot == 0x11) {
-        auto flow_it = Settings::PacketId2FlowId.find(std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport));
-        if (flow_it != Settings::PacketId2FlowId.end()) {
-            flow_id = flow_it->second;
-        }
+        flow_id = Settings::get_flowid(p);
+
         std::cout << "[SendToDevContinue-ENTRY] switch_id=" << m_id 
                   << " flow_id=" << flow_id 
                   << " determining_route_type..." << std::endl;
@@ -718,7 +709,7 @@ void SwitchNode::SendToDevContinue(Ptr<Packet> p, CustomHeader &ch) {
  * @return The interface index for the next hop.
  */
 int SwitchNode::GetStaticRoute(Ptr<Packet> p, CustomHeader &ch){
-    uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+    uint32_t flow_id = Settings::get_flowid(p);
     const auto &path = Settings::static_paths[flow_id];
     uint32_t current_id = GetId();
     auto it = std::find(path.begin(), path.end(), current_id);
@@ -751,24 +742,11 @@ int SwitchNode::GetOutDev(Ptr<Packet> p, CustomHeader &ch) {
         std::cout << "[GetOutDev-L3PROT] switch_id=" << m_id
                   << " l3Prot=" << l3ProtStr << std::endl;
     }
-    uint32_t flow_id = 0;
 
-    std::tuple<uint32_t, uint32_t, uint16_t, uint16_t> flow_key;
-    if (ch.l3Prot == 0xFC || ch.l3Prot == 0xFD) { // ACK or NACK
-        // 对于ACK/NACK包，源和目的需要互换
-        flow_key = std::make_tuple(ch.dip, ch.sip, ch.udp.dport, ch.udp.sport);
-    } else {
-        // 普通数据包
-        flow_key = std::make_tuple(ch.sip, ch.dip, ch.udp.sport, ch.udp.dport);
-    }
-    auto it = Settings::reorderable.find(flow_key);
-    bool flow_reorderable = (it != Settings::reorderable.end()) ? it->second : false;
-
+    uint32_t flow_id = Settings::get_flowid(p);
+    bool flow_reorderable = Settings::flow_info[flow_id].reorderable;
     if (reorder_log && ch.l3Prot == 0x11){
-        auto flow_it = Settings::PacketId2FlowId.find(std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport));
-        if (flow_it != Settings::PacketId2FlowId.end()) {
-            flow_id = flow_it->second;
-        }
+
         std::cout << "[GetOutDev-ENTRY] switch_id=" << m_id 
                   << " flow_id=" << flow_id 
                   << " reorderable=" << (flow_reorderable ? "true" : "false")
@@ -940,7 +918,7 @@ void SwitchNode::DoSwitchSend(Ptr<Packet> p, CustomHeader &ch, uint32_t outDev, 
                 if (ch.l3Prot == 0x11) {
                     printf("An UDP packet dropped because ingress admission check false: Node:%u, Flow:%u, Seq=%u\n", 
                         m_id, 
-                        Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)],
+                        Settings::get_flowid(p),
                         ch.udp.seq);
                     if (m_mmu->m_mmuLog) {
                         std::cout << "[MMU-INGRESS-DROP] time=" << Simulator::Now().GetMicroSeconds() 
@@ -960,7 +938,7 @@ void SwitchNode::DoSwitchSend(Ptr<Packet> p, CustomHeader &ch, uint32_t outDev, 
             if (ch.l3Prot == 0x11) {
                 printf("An UDP packet dropped because egress admission check false: Node:%u, Flow:%u, Seq=%u\n", 
                     this->m_id,
-                    Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)],
+                    Settings::get_flowid(p),
                     ch.udp.seq);
                 if (m_mmu->m_mmuLog) {
                     std::cout << "[MMU-EGRESS-DROP] time=" << Simulator::Now().GetMicroSeconds() 
@@ -1127,6 +1105,28 @@ void SwitchNode::AddPathChoiceTableEntry(Ipv4Address &dstAddr, Time now){
         m_mmu->m_caverRouting.PathChoiceFlagMap[dip] = 0;
     }
 }
+void SwitchNode::AddPathChoiceTableEntry_ToR(uint32_t ToR_id, Time now){
+    Time t1 = Seconds(0.0);
+    
+    auto dstIter = m_mmu->m_caverRouting.PathChoiceTable.find(ToR_id);
+    if (dstIter == m_mmu->m_caverRouting.PathChoiceTable.end()) {
+        // 如果不存在，则创建一个新的条目
+        for (int i = 0; i < m_mmu->m_caverRouting.m_pathChoice_num; ++i) {
+            PathChoiceInfo pathChoiceInfo;
+            // TODO:这里不确定初始化的时候设置成为now会不会让这些路径都是invalid
+            pathChoiceInfo._updateTime = t1;
+            pathChoiceInfo._is_used = false;
+            m_mmu->m_caverRouting.PathChoiceTable[ToR_id].push_back(pathChoiceInfo); 
+        }
+    }
+
+    auto dstMapIter = m_mmu->m_caverRouting.PathChoiceFlagMap.find(ToR_id);
+    if (dstMapIter == m_mmu->m_caverRouting.PathChoiceFlagMap.end()) {
+        // 如果不存在，则创建一个新的条目
+        m_mmu->m_caverRouting.PathChoiceFlagMap[ToR_id] = 0;
+    }
+}
+
 void SwitchNode::AddPerHopCaverTableEntry(uint32_t host_id, const std::vector<uint32_t>& ports) {
     // 初始化per-hop caver表项
     m_mmu->m_caverRouting.InitPerHopCaverTable(host_id, ports);
@@ -1174,6 +1174,19 @@ void SwitchNode::AddBestPathCETableEntry(Ipv4Address &dstAddr, Time now){
         m_mmu->m_caverRouting.best_pathCE_Table[dip] = caverInfo;
     }
 }
+void SwitchNode::AddBestPathCETableEntry_ToR(uint32_t ToR_id, Time now){
+    // std::cout << dstAddr;
+    auto dstIter = m_mmu->m_caverRouting.best_pathCE_Table.find(ToR_id);
+    if (dstIter == m_mmu->m_caverRouting.best_pathCE_Table.end()) {
+        // 如果不存在，则创建一个新的条目
+        bestCaverInfo caverInfo;
+        caverInfo._ce = 0;
+        caverInfo._updateTime = now;
+        caverInfo._valid = false;
+        caverInfo._inPort = 0;
+        m_mmu->m_caverRouting.best_pathCE_Table[ToR_id] = caverInfo;
+    }
+}
 
 void SwitchNode::AddBestPathCETableEntry_noshare(Ipv4Address &dstAddr, Time now){
     // std::cout << dstAddr;
@@ -1203,6 +1216,19 @@ void SwitchNode::AddACCPathCETableEntry(Ipv4Address &dstAddr, Time now){
         m_mmu->m_caverRouting.acceptable_path_table[dip] = caverInfo;
     }
 }
+void SwitchNode::AddACCPathCETableEntry_ToR(uint32_t ToR_id, Time now){
+    auto dstIter = m_mmu->m_caverRouting.acceptable_path_table.find(ToR_id);
+    if (dstIter == m_mmu->m_caverRouting.acceptable_path_table.end()) {
+        // 如果不存在，则创建一个新的条目
+        bestCaverInfo caverInfo;
+        caverInfo._ce = 0;
+        caverInfo._updateTime = now;
+        caverInfo._valid = false;
+        caverInfo._inPort = 0;
+        m_mmu->m_caverRouting.acceptable_path_table[ToR_id] = caverInfo;
+    }
+}
+
 
 void SwitchNode::AddACCPathCETableEntry_noshare(Ipv4Address &dstAddr, Time now){
     // std::cout << dstAddr;

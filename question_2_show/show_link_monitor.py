@@ -2,6 +2,8 @@ import re
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import os.path as op
+import subprocess
 
 def parse_link_states_to_dict(filepath):
     """
@@ -28,12 +30,13 @@ def parse_link_states_to_dict(filepath):
                     src_id = int(src_match.group(1))
                     link_states_data[current_timestamp].setdefault(src_id, {})
                     link_info_str = line[src_match.end(0):]
-                    link_details = re.findall(r",\s*(\d+)\s+(\d+)\s+([\d.]+)", link_info_str)
-                    for dst_id_str, qlen_str, util_str in link_details:
+                    link_details = re.findall(r",\s*(\d+)\s+(\d+)\s+([\d.]+)\s+([\d.]+)", link_info_str)
+                    for dst_id_str, qlen_str, util_str, dre_str in link_details:
                         dst_id = int(dst_id_str)
                         qlen = int(qlen_str)
                         utilization = float(util_str)
-                        link_states_data[current_timestamp][src_id][dst_id] = [qlen, utilization]
+                        dre = float(dre_str)
+                        link_states_data[current_timestamp][src_id][dst_id] = [qlen, utilization, dre]
     except FileNotFoundError:
         print(f"错误：文件 '{filepath}' 未找到。请检查文件名和路径。")
         return None
@@ -75,11 +78,11 @@ def draw_heatmap(parsed_data, timestamp, name, metric='util'):
 
     # 4. 填充矩阵
     for src_id, destinations in link_data_at_timestamp.items():
-        for dst_id, (qlen, util) in destinations.items():
+        for dst_id, (qlen, util, dre) in destinations.items():
             src_idx = node_to_idx.get(src_id)
             dst_idx = node_to_idx.get(dst_id)
             if src_idx is not None and dst_idx is not None:
-                value = util if metric == 'util' else qlen / 150000.0
+                value = {'util': util, 'qlen': qlen, 'dre': dre}[metric]
                 heatmap_matrix[src_idx, dst_idx] = value
 
     # --- 开始绘图 (已优化) ---
@@ -91,8 +94,6 @@ def draw_heatmap(parsed_data, timestamp, name, metric='util'):
         annot=False,
         cmap="viridis",
         linewidths=.1,
-        vmin=0.0,
-        vmax=1.0,
         cbar_kws={'label': f'{metric}'},
         xticklabels=sorted_nodes,
         yticklabels=sorted_nodes
@@ -113,11 +114,22 @@ def draw_heatmap(parsed_data, timestamp, name, metric='util'):
     # 显示图像
     plt.savefig(f"{name}_heatmap_{metric}_{timestamp}.png", dpi=300)
 
+def get_dir_by_id(config_id):
+    '''return experiment output dir by id'''
+    base_dir = op.join(op.dirname(__file__), '../mix/output')
+    cmd = f"ls -l {base_dir}"
+    result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+    full = [x.strip().split()[-1] for x in result.stdout.split('\n') if f'[{config_id}]' in x]
+    if len(full) != 1:
+        raise Exception(f'failed to find {config_id} experiment')
+    return op.join(base_dir, full[0])
+
 # --- 主程序入口 ---
 if __name__ == '__main__':
     # ==================== 用户配置 ====================
     # 1. 请将这里的文件名修改为您自己的 link_states 文件名
-    name = "[355]-09-12-16:35:12-fecmp-80"
+    name = "[395]-09-13-15:00:01-caver-80"
+    # name = "[359]-09-12-17:19:42-caver-80"
     FILENAME = f"../mix/output/{name}/{name}_out_link_monitor.txt"
     
     # 2. 定义网络拓扑的尺寸 (8x8 矩阵)
@@ -135,10 +147,12 @@ if __name__ == '__main__':
         print(f"在文件中找到以下时间戳: {available_timestamps}")
         
         # 默认绘制第一个找到的时间戳的热力图
-        timestamp_to_draw = available_timestamps[50]
+        timestamp_to_draw = available_timestamps[100]
         
         # 如果您想绘制特定的时间戳，可以取消下面这行的注释并修改
         # timestamp_to_draw = 1234567890 # <--- 在这里指定你想看的时间戳
 
         print(f"\n正在为时间戳 {timestamp_to_draw} 绘制热力图...")
         draw_heatmap(parsed_data, timestamp_to_draw, name, metric='util')
+        draw_heatmap(parsed_data, timestamp_to_draw, name, metric='qlen')
+        draw_heatmap(parsed_data, timestamp_to_draw, name, metric='dre')
