@@ -273,13 +273,13 @@ def main():
     parser.add_argument('--per_host_routing_scheme', dest='per_host_routing_scheme', action='store',
                     type=int, default=1, help="per-host routing scheme: 0=like caver, 1=per-host dynamic (default: 1)")
     parser.add_argument('--metric_choice', dest='metric_choice', action='store',
-                type=int, default=0, help="metric choice: 0=ce, 1=queue (default: 0)")
+                type=int, default=0, help="use queue length/ DRE as metric: 0=ce, 1=queue (default: 0)")
     parser.add_argument('--data_backup_route', dest='data_backup_route', action='store',
             type=int, default=1, help="data backup route choice: 0: ECMP, 1: greedy, 2: oblivious")
     parser.add_argument('--ack_route', dest='ack_route', action='store',
             type=int, default=2, help="ack route choice: 0: ECMP, 1: greedy, 2: oblivious (default: 2)")
     parser.add_argument('--perHop_path_select', dest='perHop_path_select', action='store',
-            type=int, default=0, help="Route Choice: 0:best, 1:random select, 2:only_best select, 3 local Dre, 4 poer-of-2")
+            type=int, default=0, help="How to choose port based on perHopCAVER table: 0:best, 1:random select, 2:only_best select, 3 local Dre, 4 poer-of-2")
     # 在 run.py 的参数解析部分添加
     parser.add_argument('--threshold_methods', dest='threshold_methods', action='store',
         type=int, default=1, help="Threshold calculation methods: 0=(255-x)*th, 1=x*th, 2=x+th (default: 1)")
