@@ -274,7 +274,8 @@ bool SwitchNode::SwitchReceiveFromDevice(Ptr<NetDevice> device, Ptr<Packet> pack
         //     headSet.insert(head);
         //     std::cout << "flow passed:" <<head << std::endl;
         // }
-        uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+        uint32_t flow_id = Settings::get_flowid(packet);
+        
         // std::cout << "Flow ID: " << flow_id << std::endl;
         if (flow_bytes.find(flow_id) == flow_bytes.end()) {
             //std::cout << "flow_passed: " << "switch_id "  <<  m_id << " flow_id "<< flow_id << std::endl;
@@ -359,8 +360,13 @@ void SwitchNode::SendToDevContinue(Ptr<Packet> p, CustomHeader &ch) {
     if (Settings::set_fixed_routing && ch.l3Prot == 0x11){
         //udp的数据包
         idx = GetStaticRoute(p, ch);
-    }
-    else{
+    } else if((ch.l3Prot == 0xFC || ch.l3Prot == 0xFD) && Settings::lb_mode == 20){
+        //ack/nack包
+        auto entry = m_rtTable.find(ch.dip);
+        assert(entry != m_rtTable.end());
+        const auto &nexthops = entry->second;
+        idx = nexthops[std::rand() % nexthops.size()];
+    }  else{
         idx = GetOutDev(p, ch);
     }
     if (idx >= 0) {
@@ -454,7 +460,7 @@ void SwitchNode::SendToDevContinue(Ptr<Packet> p, CustomHeader &ch) {
  * @return The interface index for the next hop.
  */
 int SwitchNode::GetStaticRoute(Ptr<Packet> p, CustomHeader &ch){
-    uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+    uint32_t flow_id = Settings::get_flowid(p);
     const auto &path = Settings::static_paths[flow_id];
     uint32_t current_id = GetId();
     auto it = std::find(path.begin(), path.end(), current_id);
@@ -553,7 +559,7 @@ void SwitchNode::DoSwitchSend(Ptr<Packet> p, CustomHeader &ch, uint32_t outDev, 
                 if (ch.l3Prot == 0x11) {
                     printf("An UDP packet dropped because ingress admission check false: Node:%u, Flow:%u, Seq=%u\n", 
                         m_mmu->m_noshareRouting.m_switch_id, 
-                        Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)],
+                        Settings::get_flowid(p),
                         ch.udp.seq);
                 }
                 Settings::dropped_pkt_sw_ingress++;
@@ -569,7 +575,7 @@ void SwitchNode::DoSwitchSend(Ptr<Packet> p, CustomHeader &ch, uint32_t outDev, 
             if (ch.l3Prot == 0x11) {
                 printf("An UDP packet dropped because egress admission check false: Node:%u, Flow:%u, Seq=%u\n", 
                     this->m_id,
-                    Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)],
+                    Settings::get_flowid(p),
                     ch.udp.seq);
             }
             Settings::dropped_pkt_sw_egress++;

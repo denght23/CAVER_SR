@@ -339,7 +339,7 @@ namespace ns3 {
                 if (!found) {// sender-side
                     /*---- choosing outPort ----*/
                     if (Nodepass_log){
-                        uint32_t flowid = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+                        uint32_t flowid = Settings::get_flowid(p);
                         std::cout << "Nodepass_log" << std::endl;
                         printf("flow id %d, src switch %d\n", flowid, m_switch_id);
                     }
@@ -399,7 +399,7 @@ namespace ns3 {
                         else{
                             m_choice = ChoosePath(dip, ch);
                         }
-                        uint32_t flowid = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+                        uint32_t flowid = Settings::get_flowid(p);
                         // printf("flowid:%u\n", flowid);
                         if(flowlet_log){
                             std::cout << "Flowlet expires, calculate the new port" << std::endl;
@@ -451,7 +451,7 @@ namespace ns3 {
                         else{
                             m_choice = ChoosePath(dip, ch);
                         }
-                    uint32_t flowid = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+                    uint32_t flowid = Settings::get_flowid(p);
                     // printf("flowid:%u\n", flowid);
                     struct Caver_Flowlet* newFlowlet = new Caver_Flowlet;
                     newFlowlet->_activeTime = now;
@@ -500,7 +500,7 @@ namespace ns3 {
                 /*---- receiver-side ----*/
                 p->RemovePacketTag(udpTag);
                 if (Nodepass_log){
-                    uint32_t flowid = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+                    uint32_t flowid = Settings::get_flowid(p);
                     std::cout << "Nodepass_log" << std::endl;
                     printf("flow id %d, dst switch %d\n", flowid, m_switch_id);
                 }
@@ -517,7 +517,7 @@ namespace ns3 {
             uint8_t src_enable = udpTag.GetSrcRouteEnable();
             if(Nodepass_log){
                 std::cout << "Nodepass_log" << std::endl;
-                uint32_t flowid = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+                uint32_t flowid = Settings::get_flowid(p);
                 printf("flow id %d, Mid switch %d\n", flowid, m_switch_id);
                 showCaverUdpinfo(udpTag);
             }
@@ -925,11 +925,17 @@ namespace ns3 {
     CaverRouteChoice CaverRouting::ChoosePath(uint32_t dip, CustomHeader ch){
         auto now = Simulator::Now();
         auto pathItr = PathChoiceTable.find(dip);
-        assert(pathItr != PathChoiceTable.end() && "Cannot find dip from PathChoiceTable");
+        if (pathItr == PathChoiceTable.end()) {
+            std::cerr << "[ASSERT FAIL] dip " << dip << " not found in PathChoiceTable!" << std::endl;
+            assert(false && "Cannot find dip from PathChoiceTable");
+        }
         auto pathChoiceVec = PathChoiceTable[dip];
         CaverRouteChoice choice;
         auto flagItr = PathChoiceFlagMap.find(dip);
-        assert(flagItr != PathChoiceFlagMap.end() && "Cannot find dip from PathChoiceFlagMap");
+        if (flagItr == PathChoiceFlagMap.end()) {
+            std::cerr << "[ASSERT FAIL] dip " << dip << " not found in PathChoiceFlagMap!" << std::endl;
+            assert(false && "Cannot find dip from PathChoiceFlagMap");
+        }
         uint32_t flag = PathChoiceFlagMap[dip];
         // flag表示当前待插入的位置
         bool find_path = false;
@@ -962,8 +968,8 @@ namespace ns3 {
                     printf("%ld ", pathChoiceVec[index]._updateTime.ToInteger(Time::Unit::NS));
                     printf("|");
             }
-            uint32_t flowid = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
-            printf("flowid:%u\n", flowid);
+            // uint32_t flowid = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+            // printf("flowid:%u\n", flowid);
         }
         if (find_path){
             return choice;
@@ -1284,8 +1290,7 @@ namespace ns3 {
     void CaverRouting::showCaverAck_info(CaverAckTag ackTag, CustomHeader ch){
         uint32_t ack_src_id = Settings::hostIp2IdMap[ch.sip];
         uint32_t ack_dst_id = Settings::hostIp2IdMap[ch.dip];
-        uint32_t flowid = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.dip], Settings::hostIp2IdMap[ch.sip], ch.udp.dport, ch.udp.sport)];
-        printf("ACK of flow id: %d, Ack from host %d to host %d\n", flowid, ack_src_id, ack_dst_id);
+        // printf("ACK of flow id: %d, Ack from host %d to host %d\n", flowid, ack_src_id, ack_dst_id);
         std::vector<uint8_t> fullMPath = uint32_to_uint8(ackTag.GetMPathId());
         std::vector<uint8_t> showMPath;
         for (int i = 0; i < ackTag.GetLength(); i++) {
@@ -1316,8 +1321,7 @@ namespace ns3 {
     void CaverRouting::showAck_info(CustomHeader ch){
         uint32_t ack_src_id = Settings::hostIp2IdMap[ch.sip];
         uint32_t ack_dst_id = Settings::hostIp2IdMap[ch.dip];
-        uint32_t flowid = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.dip], Settings::hostIp2IdMap[ch.sip], ch.udp.dport, ch.udp.sport)];
-        printf("ACK of flow id: %d, Ack from host %d to host %d\n", flowid, ack_src_id, ack_dst_id);
+        printf("Ack from host %d to host %d\n", ack_src_id, ack_dst_id);
     }
 
     void CaverRouting::showPortCE(uint32_t port){

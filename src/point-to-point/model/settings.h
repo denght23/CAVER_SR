@@ -107,6 +107,20 @@ struct Interface {
     Interface() : idx(0), up(false) {} //initial 
 };
 
+struct m_FlowInput {
+    uint32_t src, dst, pg, fsize, sport, dport;
+    double start_time, finish_time = 0;
+    uint32_t idx;
+    bool isFinished = false;
+    bool reorderable = false;
+    uint32_t max_ooo_degree = 0;
+    uint32_t src_routing_pkt = 0;
+    uint32_t randomly_routing_pkt = 0;
+    inline void record_switch_node(uint32_t switch_id) {
+        return;
+    }
+};
+
 /**
  * @brief Tag for monitoring last data sending time per flow
  */
@@ -157,6 +171,8 @@ class Settings {
     static void SetCaverAlpha(double alpha);//设置Caver的alpha值
     static void ShowInit();//显示初始化的信息
     virtual ~Settings() {}
+
+    static std::vector<m_FlowInput> flow_info;
 
     /* helper function */
     static Ipv4Address node_id_to_ip(uint32_t id);  // node_id -> ip
@@ -216,6 +232,7 @@ class Settings {
     static void findAllPaths(uint32_t src, uint32_t dst, std::vector<std::vector<uint32_t>>& allPaths);// 辅助函数：通过BFS找到所有路径
     static void savePathCEs(uint32_t src, uint32_t dst);// 主函数：计算并保存路径CE值
     static void writeCEMapSnapshot(FILE* ofs);//将global_CE_map追加到txt文件的一行
+    static uint32_t get_flowid(Ptr<const Packet> p);
     static bool isBond;
 
     static std::unordered_map<uint32_t, std::pair<uint32_t, uint32_t>> flowId2SrcDst; //流的id对应源Torid和目的Torid

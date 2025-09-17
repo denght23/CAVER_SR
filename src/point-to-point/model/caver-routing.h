@@ -63,6 +63,8 @@ struct PathChoiceInfo{
     bool _is_used;
     // The purpose of the following items is for comparison with the optimal path
     uint32_t _remoteCE;
+    PathChoiceInfo()
+    : _path(), _updateTime(Seconds(0)), _is_used(false), _remoteCE(0) {}
 };// Represents the path table entries stored on the tor.
 
 struct CaverRouteChoice{

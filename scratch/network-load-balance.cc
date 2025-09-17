@@ -323,8 +323,9 @@ std::map<uint32_t, std::map<uint32_t, uint32_t>> CreateNbr2Interface(const std::
  */
 void ReadFlowInput() {
     if (flow_input.idx < flow_num) {
+        uint32_t dummy;
         flowf >> flow_input.src >> flow_input.dst >> flow_input.pg >> flow_input.maxPacketCount >>
-            flow_input.start_time;
+                flow_input.start_time >> dummy;
         assert(n.Get(flow_input.src)->GetNodeType() == 0 &&
                n.Get(flow_input.dst)->GetNodeType() == 0);
     } else {
@@ -413,8 +414,8 @@ void ScheduleFlowInputs(FILE *infile) {
         }
         fflush(stdout);
 
-        Settings::PacketId2FlowId[std::make_tuple(src, dst, sport, dport)] = flow_input.idx;
-        Settings::QPPair_info2FlowId[std::make_tuple(serverAddress[src], serverAddress[dst], static_cast<uint16_t>(sport), static_cast<uint16_t>(dport))] = flow_input.idx;
+        // Settings::PacketId2FlowId[std::make_tuple(src, dst, sport, dport)] = flow_input.idx;
+        // Settings::QPPair_info2FlowId[std::make_tuple(serverAddress[src], serverAddress[dst], static_cast<uint16_t>(sport), static_cast<uint16_t>(dport))] = flow_input.idx;
         Settings::FlowId2SrcId[flow_input.idx] = src;
         //std::cout << "Flow ID: " << flow_input.idx << std::endl;
         target_len = flow_input.maxPacketCount;  // this is actually not packet-count, but bytes
@@ -678,7 +679,7 @@ void m_QP_rate_monitoring(FILE *fout_voq)
                 Ipv4Address dst = qp.second->dip;
                 uint16_t sport = qp.second->sport;
                 uint16_t dport = qp.second->dport;
-                uint32_t flowid = Settings::QPPair_info2FlowId[std::make_tuple(src, dst, sport, dport)];
+                uint32_t flowid = qp.second->m_flow_id;
                 DataRate m_rate = qp.second->m_rate;
                 uint64_t m_bps = m_rate.GetBitRate();
                 // std::cout << "bps: " << now << flowid << m_bps << std::endl;
@@ -934,10 +935,10 @@ void qp_finish(FILE *fout, Ptr<RdmaQueuePair> q) {
     rdma->m_rdma->DeleteRxQp(q->sip.Get(), q->sport, q->dport, q->m_pg);
 
     // fprintf(fout, "%lu QP complete\n", Simulator::Now().GetTimeStep());
-    fprintf(fout, "%u %u %u %u %lu %lu %lu %lu\n", Settings::ip_to_node_id(q->sip),
+    fprintf(fout, "%u %u %u %u %lu %lu %lu %lu %d\n", Settings::ip_to_node_id(q->sip),
             Settings::ip_to_node_id(q->dip), q->sport, q->dport, q->m_size,
             q->startTime.GetTimeStep(), (Simulator::Now() - q->startTime).GetTimeStep(),
-            standalone_fct);
+            standalone_fct,q->m_flow_id);
 
     // for debugging
     NS_LOG_DEBUG("%u %u %u %u %lu %lu %lu %lu\n" %
@@ -949,14 +950,14 @@ void qp_finish(FILE *fout, Ptr<RdmaQueuePair> q) {
 
     //clean
     static std::queue<std::tuple<Ipv4Address, Ipv4Address, uint16_t, uint16_t>> finishedQpBuffer; //这个buffer存放将要被清理的flow。但是我们不能立即清理，因为在乱序状态下依旧可能有部分包残存在拓扑中
-    uint32_t flow_id = Settings::PacketId2FlowId[std::make_tuple(sid, did, q->sport, q->dport)];
+    uint32_t flow_id = q->m_flow_id;
     fprintf(packetId2FlowId, "FlowKey: (%u %u %u %u) -> FlowId: %u\n", sid, did, q->sport, q->dport, flow_id);
 
     finishedQpBuffer.push(std::make_tuple(q->sip, q->dip, static_cast<uint16_t>(q->sport), static_cast<uint16_t>(q->dport)));
     if (finishedQpBuffer.size() > 100000) {
         auto& qp_info = finishedQpBuffer.front();
         uint32_t flow_id = Settings::QPPair_info2FlowId[qp_info];    
-        Settings::PacketId2FlowId.erase(std::make_tuple(Settings::ip_to_node_id(std::get<0>(qp_info)), Settings::ip_to_node_id(std::get<1>(qp_info)), std::get<2>(qp_info), std::get<3>(qp_info)));
+        // Settings::PacketId2FlowId.erase(std::make_tuple(Settings::ip_to_node_id(std::get<0>(qp_info)), Settings::ip_to_node_id(std::get<1>(qp_info)), std::get<2>(qp_info), std::get<3>(qp_info)));
         Settings::flowId2SrcDst.erase(flow_id);
         Settings::flowId2Port2Src.erase(flow_id);
         Settings::FlowId2SrcId.erase(flow_id);
@@ -2123,6 +2124,9 @@ int main(int argc, char *argv[]) {
     topo2bdpMap[std::string("fat_k8_100G_bond_OS1")] = 156000;
     topo2bdpMap[std::string("fat_k4_100G_OS1")] = 156000;
     topo2bdpMap[std::string("fat_k16_100G_OS1")] = 156000;
+    topo2bdpMap[std::string("fat_k4_1_100G_OS1")] = 156000;
+    topo2bdpMap[std::string("fat_k4_2_100G_OS1")] = 156000;
+    topo2bdpMap[std::string("fat_k4_6_100G_OS1")] = 156000;
     topo2bdpMap[std::string("leaf_spine_k_4_bond_2_OS1")] = 104000;        // RTT=3120
     topo2bdpMap[std::string("leaf_spine_k_6_bond_2_OS1")] = 104000; 
     topo2bdpMap[std::string("leaf_spine_k_8_bond_2_OS1")] = 104000; 
@@ -2336,32 +2340,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (lb_mode == 20){
-        SetPathChoiceTables();
-        SetBestPathCETables();
-        SetACCPathCETables();
-        if (init_log){
-            printf("This is init table logging\n");
-            for (auto i = nextHop.begin(); i != nextHop.end(); i++){
-                Ptr<Node> node = i->first;
-                auto &table = i->second;
-                if (node->GetNodeType() == 1){
-                    Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(node);
-                    printf("Switch %d's BestPathCETable\n", sw->GetId());
-                    sw->m_mmu->m_caverRouting.printBestPathCETable();
-                    if(sw->m_isToR){
-                        printf("ToR switch %d's PathChoiceTable\n", sw->GetId());
-                        sw->m_mmu->m_caverRouting.printPathChoiceTable();
-                        printf("ToR switch %d's PathChoiceFlagMap\n", sw->GetId());
-                        sw->m_mmu->m_caverRouting.printPathChoiceFlagMap();
-                    } else {
-                        printf("Switch %d's ACCPathCETable\n", sw->GetId());
-                        sw->m_mmu->m_caverRouting.printAcceptablePathTable();
-                    }
-                }
-            }
-        }
-    }
     if (lb_mode == 21){
         SetPathChoiceTables_noshare();
         SetBestPathCETables_noshare();
@@ -2724,6 +2702,32 @@ int main(int argc, char *argv[]) {
                         uint64_t bw = nbr2if[node][next].bw;
                         sw->m_mmu->m_caverRouting.SetLinkCapacity(outPort, bw);
                         //printf("Node: %d, interface: %d, bw: %lu\n", swId, outPort, bw);
+                    }
+                }
+            }
+        }
+    }
+    if (lb_mode == 20){
+        SetPathChoiceTables();
+        SetBestPathCETables();
+        SetACCPathCETables();
+        if (init_log){
+            printf("This is init table logging\n");
+            for (auto i = nextHop.begin(); i != nextHop.end(); i++){
+                Ptr<Node> node = i->first;
+                auto &table = i->second;
+                if (node->GetNodeType() == 1){
+                    Ptr<SwitchNode> sw = DynamicCast<SwitchNode>(node);
+                    printf("Switch %d's BestPathCETable\n", sw->GetId());
+                    sw->m_mmu->m_caverRouting.printBestPathCETable();
+                    if(sw->m_isToR){
+                        printf("ToR switch %d's PathChoiceTable\n", sw->GetId());
+                        sw->m_mmu->m_caverRouting.printPathChoiceTable();
+                        printf("ToR switch %d's PathChoiceFlagMap\n", sw->GetId());
+                        sw->m_mmu->m_caverRouting.printPathChoiceFlagMap();
+                    } else {
+                        printf("Switch %d's ACCPathCETable\n", sw->GetId());
+                        sw->m_mmu->m_caverRouting.printAcceptablePathTable();
                     }
                 }
             }

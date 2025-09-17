@@ -7,7 +7,9 @@
 #include <algorithm> // for std::max
 #include <functional>
 #include "ns3/simulator.h"
+#include "ns3/flow-id-num-tag.h"
 #include <queue>
+#include <assert.h>
 
 
 
@@ -62,6 +64,8 @@ std::vector<std::vector<uint32_t>> Settings::static_paths;
 std::map<uint32_t, Time> Settings::Dre_time_map;
 uint32_t Settings::caver_quantizeBit;
 double Settings::caver_alpha;
+
+std::vector<m_FlowInput> Settings::flow_info;
 
 std::pair<std::vector<uint32_t>, uint32_t> Settings::FindMinCostPath(uint32_t startNode, uint32_t destNode) {
     std::set<uint32_t> visited;
@@ -205,7 +209,7 @@ void Settings::record_flow_distribution(Ptr<Packet> p, CustomHeader &ch, Ptr<Nod
     if (dstId == Settings::hostIp2IdMap[ch.dip]) {
         return;
     }
-    uint32_t flowId = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+    uint32_t flowId = Settings::get_flowid(p);
     //printf("[%ld]%u -> %u, Flow:%u, Seq:%u\n", Simulator::Now().GetNanoSeconds(), srcId, dstId, flowId, ch.udp.seq);
     //flowRecorder[linkKey][flowId] = Simulator::Now();
     linkRecorder[linkKey].total_size += p->GetSize();
@@ -379,6 +383,15 @@ void Settings::writeCEMapSnapshot(FILE* ofs) {
         fprintf(ofs, "[%u,%u,%u]", entry.first.first, entry.first.second, entry.second);
     }
     fprintf(ofs, "]\n");
+}
+uint32_t Settings::get_flowid(Ptr<const Packet> p) {
+    FlowIDNUMTag fit;
+    if (p->PeekPacketTag(fit)) {
+        return fit.GetId();
+    } else {
+        assert(false);
+        return 0xFFFFFFFF;
+    }
 }
 void Settings::read_static_path(std::string path){
     std::ifstream infile(path);

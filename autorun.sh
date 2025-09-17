@@ -28,27 +28,53 @@ if [ ! -f "mix/index.txt" ] || [ ! -s "mix/index.txt" ]; then
   echo "0" > "mix/index.txt"
 fi
 
-# Lossless RDMA
-cecho "GREEN" "Run Lossless RDMA experiments..."
-if [ -z "$3" ]; then
-    lb_modes=("caver" "conga" "conweave" "hula" "fecmp") # "dv" "noshare" 
-else
-    lb_modes=("caver")
-fi
-for lb_mode in "${lb_modes[@]}"; do
-  cecho "GREEN" "Run $lb_mode RDMA experiments..."
+# # Lossless RDMA
+# cecho "GREEN" "Run Lossless RDMA experiments..."
+# if [ -z "$3" ]; then
+#     lb_modes=("caver" "conga" "conweave" "hula" "fecmp") # "dv" "noshare" 
+# else
+#     lb_modes=("caver")
+# fi
+# for lb_mode in "${lb_modes[@]}"; do
+#   cecho "GREEN" "Run $lb_mode RDMA experiments..."
 
-  echo -n "$lb_mode:$(cat mix/index.txt)," >> ./mix/autorun_history.txt
+#   echo -n "$lb_mode:$(cat mix/index.txt)," >> ./mix/autorun_history.txt
 
-  python3 run.py --lb $lb_mode --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload ${NETLOAD} --topo ${TOPOLOGY} 2>&1 > /dev/null &
-  #python3 run.py --lb $lb_mode --pfc 1 --irn 0 --simul_time 0.1 --netload 50 --topo fat_k8_100G_OS1 --my_flow llm_flow 2>&1 > /dev/null &
-  #python3 run.py --lb $lb_mode --pfc 1 --irn 0 --simul_time 0.03 --netload 60 --topo fat_k8_100G_OS2 --my_flow incast300 2>&1 > /dev/null &
-  sleep 10
-done
-#python3 run.py --lb caver --pfc 1 --irn 0 --simul_time 0.01 --netload 30 --topo leaf_spine_128_100G_OS2
-echo "]" >> ./mix/autorun_history.txt
+#   python3 run.py --lb $lb_mode --pfc 1 --irn 0 --simul_time ${RUNTIME} --netload ${NETLOAD} --topo ${TOPOLOGY} 2>&1 > /dev/null &
+#   #python3 run.py --lb $lb_mode --pfc 1 --irn 0 --simul_time 0.1 --netload 50 --topo fat_k8_100G_OS1 --my_flow llm_flow 2>&1 > /dev/null &
+#   #python3 run.py --lb $lb_mode --pfc 1 --irn 0 --simul_time 0.03 --netload 60 --topo fat_k8_100G_OS2 --my_flow incast300 2>&1 > /dev/null &
+#   sleep 10
+# done
+# #python3 run.py --lb caver --pfc 1 --irn 0 --simul_time 0.01 --netload 30 --topo leaf_spine_128_100G_OS2
+# echo "]" >> ./mix/autorun_history.txt
 
-#python3 run.py --lb hula --pfc 1 --irn 0 --simul_time 0.1 --netload 50 --topo leaf_spine_128_100G_OS2
+
+
+python3 run.py --lb fecmp --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k4_100G_OS1 --my_flow L_40.00_CDF_AliStorage2019_N_16_T_30ms_B_100_flow 2>&1 > /dev/null &
+
+
+python3 run.py --lb caver --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_29.00_CDF_AliStorage2019_N_256_T_30ms_B_100_SR_1.0_flow_split 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb fecmp --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_29.00_CDF_AliStorage2019_N_256_T_30ms_B_100_SR_1.0_flow_split 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb caver --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_29.00_CDF_AliStorage2019_N_256_T_30ms_B_100_SR_0.9_flow_split 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb fecmp --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_29.00_CDF_AliStorage2019_N_256_T_30ms_B_100_SR_0.9_flow_split 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb caver --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_29.00_CDF_AliStorage2019_N_256_T_30ms_B_100_SR_0.8_flow_split 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb fecmp --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_29.00_CDF_AliStorage2019_N_256_T_30ms_B_100_SR_0.8_flow_split 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb caver --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_29.00_CDF_AliStorage2019_N_256_T_30ms_B_100_SR_0.7_flow_split 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb fecmp --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_29.00_CDF_AliStorage2019_N_256_T_30ms_B_100_SR_0.7_flow_split 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb caver --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_29.00_CDF_AliStorage2019_N_256_T_30ms_B_100_SR_0.6_flow_split 2>&1 > /dev/null &
+sleep 10
+python3 run.py --lb fecmp --pfc 1 --irn 0 --simul_time 0.03 --netload 50 --topo fat_k8_100G_OS2 --my_flow L_29.00_CDF_AliStorage2019_N_256_T_30ms_B_100_SR_0.6_flow_split 2>&1 > /dev/null &
+
+
+
 
 # IRN RDMA
 #cecho "GREEN" "Run IRN RDMA experiments..."

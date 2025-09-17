@@ -160,7 +160,7 @@ void RdmaHw::Setup(QpCompleteCallback cb) {
 uint32_t RdmaHw::GetNicIdxOfQp(Ptr<RdmaQueuePair> qp) {
     if (Settings::lb_mode == 9 || Settings::lb_mode == 12 || Settings::lb_mode == 3 || Settings::lb_mode == 6){
         //对于ConWeave， 在这里指定Src到达SrcToR的结果：
-        uint32_t flow_id = Settings::QPPair_info2FlowId[std::make_tuple(qp->sip, qp->dip, qp->sport, qp->dport)];
+        uint32_t flow_id = qp->m_flow_id;
         uint32_t SrcToR_id = Settings::flowId2SrcDst[flow_id].first;
         uint32_t outPort = Settings::flowId2Port2Src[flow_id];
         return outPort;
@@ -347,7 +347,7 @@ int RdmaHw::ReceiveUdp(Ptr<Packet> p, CustomHeader &ch) {
     bool cnp_check = false;
     int x = ReceiverCheckSeq(ch.udp.seq, rxQp, payload_size, cnp_check);
 
-    uint32_t glb_flow_id = Settings::PacketId2FlowId[std::make_tuple(Settings::hostIp2IdMap[ch.sip], Settings::hostIp2IdMap[ch.dip], ch.udp.sport, ch.udp.dport)];
+    uint32_t glb_flow_id = Settings::get_flowid(p);
     if (rxQp->ReceiverNextExpectedSeq >= Settings::FlowId2Length[glb_flow_id] && x == 5) { //已经全部发完
         //printf("Receive Last Packet, FlowId:%d, Length:%u, x=%d\n", rxQp->m_flow_id, Settings::FlowId2Length[glb_flow_id], x);
         x = 1;
@@ -919,10 +919,11 @@ void RdmaHw::HandleTimeout(Ptr<RdmaQueuePair> qp, Time rto) {
     acc_timeout_count[qp->m_flow_id]++;
 
     if (qp->irn.m_enabled) qp->irn.m_recovery = true;
-    printf("Retransmition Timeout! Flow:%u\n", Settings::QPPair_info2FlowId[std::make_tuple(qp->sip, qp->dip, qp->sport, qp->dport)]);
+    printf("Retransmition Timeout! Flow:%u\n", qp->m_flow_id);
     RecoverQueue(qp);
     dev->TriggerTransmit();
 }
+
 
 void RdmaHw::UpdateNextAvail(Ptr<RdmaQueuePair> qp, Time interframeGap, uint32_t pkt_size) {
     Time sendingTime;

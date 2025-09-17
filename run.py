@@ -15,7 +15,7 @@ import argparse
 from datetime import date
 
 # randomID
-random.seed(datetime.now())
+random.seed(int(datetime.now().timestamp()))
 MAX_RAND_RANGE = 1000000000
 
 # config template
@@ -156,6 +156,9 @@ topo2bdp = {
     "fat_k_4_OS1":156000,
     "fat_k_4_no_bond_OS1":156000,
     "fat_k_4_nobond_OS1":156000,
+    "fat_k4_1_100G_OS1":156000,
+    "fat_k4_2_100G_OS1":156000,
+    "fat_k4_6_100G_OS1":156000,
     "Congestion_OS1":104000,
 }
 
@@ -216,7 +219,7 @@ def main():
     parser.add_argument('--caver_patchoiceTimeout', dest='caver_patchoiceTimeout', action='store',
                         type=int, default=50, help="Caver Patchoice Timeout (default: 50us)")
     parser.add_argument('--caver_pathChoice_num', dest='caver_pathChoice_num', action='store',
-                        type=int, default=4, help="Caver Path Choice Number (default: 4)")
+                        type=int, default=6, help="Caver Path Choice Number (default: 4)")
     parser.add_argument('--caver_tau', dest='caver_tau', action='store',
                         type=int, default=100, help="Caver Tau (default: 100us)")
     parser.add_argument('--caver_useEWMA', dest='caver_useEWMA', action='store',
@@ -477,7 +480,7 @@ def main():
 
     print(run_command)
     os.system(f"./waf --run 'scratch/network-load-balance {config_name}' > {output_log} 2>&1")
-    #os.system(f"./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s {config_name}'\n")
+    # os.system(f"./waf --run 'scratch/network-load-balance' --command-template='gdb --args %s {config_name}'\n")
 
     ####################################################
     #                 Analyze the output FCT           #
